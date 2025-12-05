@@ -1,0 +1,297 @@
+<?php
+// Gemensamma funktioner för bibliotekssystemet
+
+// Enkel .env-laddare utan externa beroenden
+function loadEnv($filePath) {
+    if (!file_exists($filePath)) {
+        return;
+    }
+
+    $lines = file($filePath, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+    foreach ($lines as $line) {
+        // Hoppa över kommentarer
+        if (strpos(trim($line), '#') === 0) {
+            continue;
+        }
+
+        // Parsa KEY=VALUE
+        if (strpos($line, '=') !== false) {
+            list($key, $value) = explode('=', $line, 2);
+            $key = trim($key);
+            $value = trim($value);
+
+            // Ta bort citattecken om de finns
+            $value = trim($value, '"\'');
+
+            if (!empty($key)) {
+                $_ENV[$key] = $value;
+                putenv("$key=$value");
+            }
+        }
+    }
+}
+
+// Funktion för att hämta OAuth-token
+function getOAuthToken($oauthUrl, $clientId, $clientSecret) {
+    $ch = curl_init();
+    curl_setopt($ch, CURLOPT_URL, $oauthUrl);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+    curl_setopt($ch, CURLOPT_POST, true);
+    curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query([
+        'grant_type' => 'client_credentials',
+        'client_id' => $clientId,
+        'client_secret' => $clientSecret
+    ]));
+    curl_setopt($ch, CURLOPT_HTTPHEADER, [
+        'Content-Type: application/x-www-form-urlencoded'
+    ]);
+    curl_setopt($ch, CURLOPT_TIMEOUT, 10);
+
+    $response = curl_exec($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+
+    if ($httpCode === 200 && $response) {
+        $data = json_decode($response, true);
+        if (isset($data['access_token'])) {
+            return $data['access_token'];
+        }
+    }
+
+    return null;
+}
+
+// Funktion för att hämta bokdata från API
+function getBookDataFromApi($biblioId, $apiBaseUrl, $apiToken) {
+    $ch = curl_init();
+    curl_setopt($ch, CURLOPT_URL, $apiBaseUrl . $biblioId);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+    curl_setopt($ch, CURLOPT_HTTPHEADER, [
+        'Accept: application/json',
+        'Authorization: Bearer ' . $apiToken
+    ]);
+    curl_setopt($ch, CURLOPT_TIMEOUT, 10);
+
+    $response = curl_exec($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+
+    if ($httpCode === 200 && $response) {
+        $data = json_decode($response, true);
+
+        return [
+            'isbn' => $data['isbn'] ?? null,
+            'title' => $data['title'] ?? null,
+            'author' => $data['author'] ?? null,
+            'abstract' => $data['abstract'] ?? null,
+            'subtitle' => $data['subtitle'] ?? null,
+            'publisher' => $data['publisher'] ?? null,
+            'publication_year' => $data['publication_year'] ?? null,
+            'publication_place' => $data['publication_place'] ?? null,
+            'pages' => $data['pages'] ?? null,
+            'material_size' => $data['material_size'] ?? null,
+            'edition_statement' => $data['edition_statement'] ?? null,
+            'series_title' => $data['series_title'] ?? null,
+            'age_restriction' => $data['age_restriction'] ?? null,
+            'url' => $data['url'] ?? null,
+            'ean' => $data['ean'] ?? null,
+            'notes' => $data['notes'] ?? null
+        ];
+    }
+
+    return [
+        'isbn' => null,
+        'title' => null,
+        'author' => null,
+        'abstract' => null,
+        'subtitle' => null,
+        'publisher' => null,
+        'publication_year' => null,
+        'publication_place' => null,
+        'pages' => null,
+        'material_size' => null,
+        'edition_statement' => null,
+        'series_title' => null,
+        'age_restriction' => null,
+        'url' => null,
+        'ean' => null,
+        'notes' => null
+    ];
+}
+
+// Extrahera biblio ID från URL
+function extractBiblioId($url) {
+    // URL-format: .../opac-detail.pl?biblionumber=55738
+    if (preg_match('/biblionumber=(\d+)/', $url, $matches)) {
+        return $matches[1];
+    }
+    return null;
+}
+
+// Funktion för att extrahera första ISBN från fält som kan innehålla flera
+function getFirstIsbn($isbnString) {
+    if (!$isbnString) {
+        return null;
+    }
+
+    // Hantera flera ISBN separerade med | eller ,
+    $parts = preg_split('/\s*[|,]\s*/', trim($isbnString));
+    $firstIsbn = trim($parts[0]);
+
+    // Ta bort eventuella bindestreck och mellanslag
+    $cleanIsbn = preg_replace('/[\s-]/', '', $firstIsbn);
+
+    return $cleanIsbn ?: null;
+}
+
+// Funktion för att bygga bildURL från ISBN
+function getImageUrl($isbn) {
+    if (!$isbn) {
+        return null;
+    }
+
+    return "https://secure.syndetics.com/index.aspx?isbn={$isbn}/LC.JPG&client=bibfalken&type=xw12";
+}
+
+// Funktion för att ladda ner och cacha bild
+function cacheImage($isbn, $syndeticsUrl) {
+    if (!$isbn || !$syndeticsUrl) {
+        return null;
+    }
+
+    $imageDir = __DIR__ . '/images';
+    $imageFilename = $isbn . '.jpg';
+    $imagePath = $imageDir . '/' . $imageFilename;
+    $imageWebPath = 'images/' . $imageFilename;
+
+    // Om bilden redan finns cachad, returnera den
+    if (file_exists($imagePath)) {
+        return $imageWebPath;
+    }
+
+    // Skapa images-mappen om den inte finns
+    if (!is_dir($imageDir)) {
+        mkdir($imageDir, 0755, true);
+    }
+
+    // Ladda ner bilden från Syndetics
+    $ch = curl_init();
+    curl_setopt($ch, CURLOPT_URL, $syndeticsUrl);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+    curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
+    curl_setopt($ch, CURLOPT_TIMEOUT, 15);
+    curl_setopt($ch, CURLOPT_USERAGENT, 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36');
+
+    $imageData = curl_exec($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $contentType = curl_getinfo($ch, CURLINFO_CONTENT_TYPE);
+    curl_close($ch);
+
+    // Kontrollera att det är en riktig bild (inte fel-sida)
+    if ($httpCode === 200 && $imageData && strpos($contentType, 'image') !== false) {
+        // Spara bilden
+        if (file_put_contents($imagePath, $imageData)) {
+            return $imageWebPath;
+        }
+    }
+
+    return null;
+}
+
+// Funktion för att hämta RSS-feed
+function fetchRssFeed($rssUrl) {
+    $ch = curl_init();
+    curl_setopt($ch, CURLOPT_URL, $rssUrl);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
+    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+    curl_setopt($ch, CURLOPT_TIMEOUT, 30);
+    curl_setopt($ch, CURLOPT_COOKIE, 'KOHA_INIT=1');
+    curl_setopt($ch, CURLOPT_USERAGENT, 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36');
+
+    $xmlData = curl_exec($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $error = curl_error($ch);
+    curl_close($ch);
+
+    return [
+        'data' => $xmlData,
+        'http_code' => $httpCode,
+        'error' => $error
+    ];
+}
+
+// Funktion för att processa RSS-feed till JSON-struktur
+function processRssFeed($xml, $apiBaseUrl, $apiToken) {
+    $result = [
+        'status' => 'ok',
+        'cached_at' => date('Y-m-d H:i:s'),
+        'channel' => [
+            'title' => (string)$xml->channel->title,
+            'link' => (string)$xml->channel->link,
+            'description' => (string)$xml->channel->description,
+            'language' => (string)$xml->channel->language,
+            'lastBuildDate' => (string)$xml->channel->lastBuildDate
+        ],
+        'items' => []
+    ];
+
+    // Lägg till varje bok/item från RSS-feeden
+    foreach ($xml->channel->item as $item) {
+        $link = (string)$item->link;
+        $biblioId = extractBiblioId($link);
+        $bookData = [
+            'isbn' => null,
+            'title' => null,
+            'author' => null
+        ];
+
+        if ($biblioId) {
+            $bookData = getBookDataFromApi($biblioId, $apiBaseUrl, $apiToken);
+        }
+
+        // Extrahera första ISBN och bygg bildURL
+        $firstIsbn = getFirstIsbn($bookData['isbn']);
+        $imageUrl = getImageUrl($firstIsbn);
+
+        // Cacha bilden lokalt
+        $cachedImagePath = null;
+        if ($imageUrl) {
+            $cachedImagePath = cacheImage($firstIsbn, $imageUrl);
+        }
+
+        $result['items'][] = [
+            'title' => (string)$item->title,
+            'link' => $link,
+            'description' => (string)$item->description,
+            'pubDate' => (string)$item->pubDate,
+            'guid' => (string)$item->guid,
+            'biblio_id' => $biblioId,
+            'isbn' => $bookData['isbn'],
+            'isbn_clean' => $firstIsbn,
+            'api_title' => $bookData['title'],
+            'api_author' => $bookData['author'],
+            'abstract' => $bookData['abstract'],
+            'subtitle' => $bookData['subtitle'],
+            'publisher' => $bookData['publisher'],
+            'publication_year' => $bookData['publication_year'],
+            'publication_place' => $bookData['publication_place'],
+            'pages' => $bookData['pages'],
+            'material_size' => $bookData['material_size'],
+            'edition_statement' => $bookData['edition_statement'],
+            'series_title' => $bookData['series_title'],
+            'age_restriction' => $bookData['age_restriction'],
+            'url' => $bookData['url'],
+            'ean' => $bookData['ean'],
+            'notes' => $bookData['notes'],
+            'image_url' => $imageUrl,
+            'image_cached' => $cachedImagePath
+        ];
+    }
+
+    return $result;
+}
+?>
