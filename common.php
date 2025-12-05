@@ -146,13 +146,24 @@ function getFirstIsbn($isbnString) {
     return $cleanIsbn ?: null;
 }
 
+// Funktion för att rensa avslutande / och : från titel
+function cleanTitle($title) {
+    if (!$title) {
+        return null;
+    }
+
+    // Ta bort avslutande /, :, och whitespace
+    return rtrim(trim($title), '/: ');
+}
+
 // Funktion för att bygga bildURL från ISBN
 function getImageUrl($isbn) {
     if (!$isbn) {
         return null;
     }
 
-    return "https://secure.syndetics.com/index.aspx?isbn={$isbn}/LC.JPG&client=bibfalken&type=xw12";
+    $client = getenv('SYNDETICS_CLIENT') ?: 'bibfalken';
+    return "https://secure.syndetics.com/index.aspx?isbn={$isbn}/LC.JPG&client={$client}&type=xw12";
 }
 
 // Funktion för att ladda ner och cacha bild
@@ -225,7 +236,7 @@ function fetchRssFeed($rssUrl) {
 }
 
 // Funktion för att processa RSS-feed till JSON-struktur
-function processRssFeed($xml, $apiBaseUrl, $apiToken) {
+function processRssFeed($xml, $apiBaseUrl, $apiToken, $baseUrl = '') {
     $result = [
         'status' => 'ok',
         'cached_at' => date('Y-m-d H:i:s'),
@@ -259,8 +270,12 @@ function processRssFeed($xml, $apiBaseUrl, $apiToken) {
 
         // Cacha bilden lokalt
         $cachedImagePath = null;
+        $cachedImageFullUrl = null;
         if ($imageUrl) {
             $cachedImagePath = cacheImage($firstIsbn, $imageUrl);
+            if ($cachedImagePath && $baseUrl) {
+                $cachedImageFullUrl = $baseUrl . $cachedImagePath;
+            }
         }
 
         $result['items'][] = [
@@ -272,7 +287,7 @@ function processRssFeed($xml, $apiBaseUrl, $apiToken) {
             'biblio_id' => $biblioId,
             'isbn' => $bookData['isbn'],
             'isbn_clean' => $firstIsbn,
-            'api_title' => $bookData['title'],
+            'api_title' => cleanTitle($bookData['title']),
             'api_author' => $bookData['author'],
             'abstract' => $bookData['abstract'],
             'subtitle' => $bookData['subtitle'],
@@ -288,10 +303,52 @@ function processRssFeed($xml, $apiBaseUrl, $apiToken) {
             'ean' => $bookData['ean'],
             'notes' => $bookData['notes'],
             'image_url' => $imageUrl,
-            'image_cached' => $cachedImagePath
+            'image_cached' => $cachedImagePath,
+            'image_cached_url' => $cachedImageFullUrl
         ];
     }
 
     return $result;
+}
+
+// Funktion för att generera XML-output från result-array
+function generateXmlOutput($result) {
+    $xml = new SimpleXMLElement('<?xml version="1.0" encoding="UTF-8"?><response></response>');
+
+    // Lägg till status och cached_at
+    $xml->addChild('status', htmlspecialchars($result['status']));
+    $xml->addChild('cached_at', htmlspecialchars($result['cached_at']));
+
+    // Lägg till channel-information
+    $channel = $xml->addChild('channel');
+    $channel->addChild('title', htmlspecialchars($result['channel']['title']));
+    $channel->addChild('link', htmlspecialchars($result['channel']['link']));
+    $channel->addChild('description', htmlspecialchars($result['channel']['description']));
+    $channel->addChild('language', htmlspecialchars($result['channel']['language']));
+    $channel->addChild('lastBuildDate', htmlspecialchars($result['channel']['lastBuildDate']));
+
+    // Lägg till items
+    $items = $xml->addChild('items');
+    foreach ($result['items'] as $itemData) {
+        $item = $items->addChild('item');
+
+        foreach ($itemData as $key => $value) {
+            if ($value !== null && $value !== '') {
+                // Hantera speciella tecken
+                $item->addChild($key, htmlspecialchars($value));
+            } else {
+                // Lägg till tom tag för null-värden
+                $item->addChild($key);
+            }
+        }
+    }
+
+    // Formatera XML med indentation
+    $dom = new DOMDocument('1.0', 'UTF-8');
+    $dom->preserveWhiteSpace = false;
+    $dom->formatOutput = true;
+    $dom->loadXML($xml->asXML());
+
+    return $dom->saveXML();
 }
 ?>
