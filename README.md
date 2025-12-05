@@ -450,7 +450,7 @@ Internt projekt för Falkenbergs kommun.
 
 ## Kontakt
 
-För frågor och support, kontakta utvecklingsavdelningen på Falkenbergs kommun.
+För frågor och support, kontakta Utvecklingsavdelningen på Falkenbergs kommun.
 
 ---
 
