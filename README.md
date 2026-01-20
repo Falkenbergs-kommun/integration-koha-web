@@ -1,4 +1,4 @@
-# Koha RSS-integration för Falkenbergs bibliotek
+# Koha integration för Falkenbergs bibliotek
 
 RSS till JSON/XML-konverterare som hämtar boklistor från Kohas bibliotekssystem, berikar med metadata från API, cachar bokomslag och serverar data i JSON eller XML-format.
 
