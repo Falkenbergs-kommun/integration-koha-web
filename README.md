@@ -51,6 +51,9 @@ BASE_URL=https://bibliotek.falkenberg.se/fbg_apps/services/koha/
 
 # Syndetics-konfiguration för bokomslag
 SYNDETICS_CLIENT=bibfalken
+
+# Cache-inställningar (i sekunder)
+CACHE_TTL_LATEST=3600
 ```
 
 4. **Säkerställ katalogstrukturen**
@@ -105,7 +108,30 @@ https://bibliotek.falkenberg.se/fbg_apps/services/koha/index.php
 https://bibliotek.falkenberg.se/fbg_apps/services/koha/list.php?id=247
 ```
 
-#### 4. **debug.php** - Utvecklingsverktyg för RSS-felsökning
+#### 4. **latest.php** - Senaste böckerna i katalogen (nyinköp)
+
+**JSON-format (default):**
+```bash
+# Senaste 10 böckerna (default)
+https://bibliotek.falkenberg.se/fbg_apps/services/koha/latest.php
+
+# Anpassat antal (max 50)
+https://bibliotek.falkenberg.se/fbg_apps/services/koha/latest.php?limit=20
+
+# Med format
+https://bibliotek.falkenberg.se/fbg_apps/services/koha/latest.php?limit=15&format=json
+```
+
+**XML-format:**
+```bash
+# Senaste 10 böckerna i XML
+https://bibliotek.falkenberg.se/fbg_apps/services/koha/latest.php?format=xml
+
+# Anpassat antal i XML
+https://bibliotek.falkenberg.se/fbg_apps/services/koha/latest.php?limit=20&format=xml
+```
+
+#### 5. **debug.php** - Utvecklingsverktyg för RSS-felsökning
 
 ```bash
 https://bibliotek.falkenberg.se/fbg_apps/services/koha/debug.php
@@ -115,9 +141,10 @@ https://bibliotek.falkenberg.se/fbg_apps/services/koha/debug.php
 
 | Parameter | Värden | Standard | Beskrivning |
 |-----------|--------|----------|-------------|
-| `shelfnumber` | integer | 247 | Kohas shelf-ID |
-| `format` | json, xml | json | Svarsformat |
+| `shelfnumber` | integer | 247 | Kohas shelf-ID (shelf.php) |
+| `format` | json, xml | json | Svarsformat (shelf.php, latest.php) |
 | `id` | integer | - | List-ID (endast list.php) |
+| `limit` | integer | 10 | Antal böcker, max 50 (endast latest.php) |
 
 ### Exempel på svar
 
@@ -196,6 +223,8 @@ https://bibliotek.falkenberg.se/fbg_apps/services/koha/debug.php
 
 ## Dataflöde
 
+### RSS-baserade endpoints (shelf.php, list.php, index.php)
+
 1. Klient gör förfrågan till endpoint (t.ex. `shelf.php?shelfnumber=247&format=json`)
 2. Kontrollera filbaserad cache (1 timmes TTL) - returnera omedelbart om giltig
 3. Hämta RSS-feed från bibliotekskatalog.falkenberg.se
@@ -206,23 +235,38 @@ https://bibliotek.falkenberg.se/fbg_apps/services/koha/debug.php
 8. Bygg komplett JSON/XML-svar med RSS + API + bilddata
 9. Skriv till cache-fil och returnera till klient
 
+### API-baserad endpoint (latest.php)
+
+1. Klient gör förfrågan (t.ex. `latest.php?limit=10&format=json`)
+2. Kontrollera filbaserad cache (konfigurerbar TTL via CACHE_TTL_LATEST) - returnera om giltig
+3. Autentisera mot externt API via OAuth 2.0 client credentials
+4. Hämta senaste böckerna direkt från Koha API (`/biblios?_order_by=-biblio_id`)
+5. Extrahera ISBN från varje bok, generera Syndetics bild-URL
+6. Ladda ner och cacha bokomslag lokalt
+7. Bygg komplett JSON/XML-svar med API-data + bilddata
+8. Skriv till cache-fil och returnera till klient
+
 ## Projektstruktur
 
 ```
 .
-├── shelf.php           # Flexibel endpoint med shelfnumber och format-stöd
-├── index.php           # Enkel endpoint (shelf 247, JSON)
-├── list.php            # Dynamisk lista med ?id parameter
-├── common.php          # Delad funktionsbibliotek
-├── debug.php           # Utvecklingsverktyg för RSS-debugging
-├── .env                # API-credentials och konfiguration (ej i git)
-├── .env.example        # Mall för miljövariabler
-├── .gitignore          # Git-undantag (cache, bilder, .env)
-├── cache.json          # JSON-cache för index.php
-├── cache_shelf*.cache  # Cache-filer per shelf och format
-├── images/             # Cachade bokomslag (persistenta)
-├── CLAUDE.md           # Teknisk dokumentation för Claude Code
-└── README.md           # Denna fil
+├── shelf.php            # Flexibel endpoint med shelfnumber och format-stöd
+├── index.php            # Enkel endpoint (shelf 247, JSON)
+├── list.php             # Dynamisk lista med ?id parameter
+├── latest.php           # Senaste böckerna via API (nyinköp)
+├── common.php           # Delad funktionsbibliotek
+├── debug.php            # Utvecklingsverktyg för RSS-debugging
+├── .env                 # API-credentials och konfiguration (ej i git)
+├── .env.example         # Mall för miljövariabler
+├── .gitignore           # Git-undantag (cache, bilder, .env)
+├── cache.json           # JSON-cache för index.php
+├── cache_shelf*.cache   # Cache-filer per shelf och format
+├── cache_latest_*.cache # Cache-filer för latest.php
+├── cache_list_*.json    # Cache-filer för list.php
+├── images/              # Cachade bokomslag (persistenta)
+├── docs/                # API-dokumentation (OpenAPI)
+├── CLAUDE.md            # Teknisk dokumentation för Claude Code
+└── README.md            # Denna fil
 ```
 
 ## Cachning
@@ -233,7 +277,10 @@ https://bibliotek.falkenberg.se/fbg_apps/services/koha/debug.php
   - `cache.json` (index.php)
   - `cache_shelf{nummer}_{format}.cache` (shelf.php)
   - `cache_list_{id}.json` (list.php)
-- **TTL**: 1 timme (3600 sekunder)
+  - `cache_latest_{limit}_{format}.cache` (latest.php)
+- **TTL**:
+  - 1 timme (3600 sekunder) - default för index.php, shelf.php, list.php
+  - Konfigurerbar via `CACHE_TTL_LATEST` för latest.php (default 3600)
 - **Invalidering**: Automatisk via filemtime-kontroll
 - **Läge**: Läs/skriv för webbserver
 
@@ -433,7 +480,7 @@ A: `index.php` är legacy-endpoint för bakåtkompatibilitet. `shelf.php` är de
 A: 5-15 sekunder beroende på antal böcker och API-responstid. Efterföljande anrop inom 1 timme returnerar från cache på <100ms.
 
 **Q: Kan jag ändra cache-tiden?**
-A: Ja, ändra `$cacheMaxAge` i respektive PHP-fil (standard 3600 sekunder = 1 timme).
+A: Ja, för latest.php använd miljövariabeln `CACHE_TTL_LATEST` i .env. För övriga endpoints, ändra `$cacheMaxAge` i respektive PHP-fil (standard 3600 sekunder = 1 timme).
 
 **Q: Vad händer om Syndetics-bilden saknas?**
 A: `image_cached` och `image_cached_url` blir `null`, övriga data returneras normalt.
@@ -443,6 +490,12 @@ A: Ja, systemet fungerar över både HTTP och HTTPS.
 
 **Q: Kan jag få data i andra format än JSON/XML?**
 A: För närvarande stöds endast JSON och XML. Kontakta utvecklingsteamet för andra format.
+
+**Q: Vad är skillnaden mellan shelf.php och latest.php?**
+A: `shelf.php` hämtar böcker från en specifik boklista (shelf) via RSS. `latest.php` hämtar de senast tillagda böckerna i hela katalogen direkt via API, sorterat på biblio_id.
+
+**Q: Hur bestäms vilka böcker som är "senaste" i latest.php?**
+A: Böckerna sorteras på biblio_id i fallande ordning (-biblio_id), vilket ger de senast tillagda posterna i Koha-systemet.
 
 ## Licens
 
@@ -454,4 +507,4 @@ För frågor och support, kontakta Utvecklingsavdelningen på Falkenbergs kommun
 
 ---
 
-*Senast uppdaterad: 2024-12-05*
+*Senast uppdaterad: 2026-01-20*
