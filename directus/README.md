@@ -45,7 +45,24 @@ php create_koha_biblios_collection.php
 
 ## Användning
 
+### Två Synkroniseringsalternativ
+
+Det finns två synkroniseringsskript:
+
+1. **`sync_koha_to_directus.php`** - Testsynk (100 böcker)
+   - Snabb och säker för testning
+   - Begränsad till 100 nyaste böcker
+   - Rekommenderas för verifiering och dagliga uppdateringar
+
+2. **`sync_koha_to_directus_full.php`** - Full katalogsynk (~71,000 böcker)
+   - Synkroniserar hela katalogen
+   - Tar ~3.8 timmar
+   - Implementerar 500ms fördröjningar mellan batchar
+   - Rekommenderas för initial sync och månadsvis
+
 ### Manuell Synkronisering
+
+#### Testsynk (100 böcker)
 
 ```bash
 # Normal körning
@@ -54,6 +71,32 @@ php sync_koha_to_directus.php
 # Med verbose output (rekommenderat första gången)
 php sync_koha_to_directus.php -v
 ```
+
+#### Full Katalogsynk (~71,000 böcker)
+
+```bash
+# Full sync med standardinställningar (batch 100, delay 500ms)
+php sync_koha_to_directus_full.php
+
+# Med verbose output
+php sync_koha_to_directus_full.php -v
+
+# Custom batch size och delay
+php sync_koha_to_directus_full.php --batch-size=250 --delay=1000
+
+# Begränsa antal för testning
+php sync_koha_to_directus_full.php --limit=1000
+
+# Resumera från specifikt biblio_id
+php sync_koha_to_directus_full.php --start-from=50000
+```
+
+**Flaggor för full sync:**
+- `-v, --verbose` - Detaljerad output
+- `--batch-size=N` - Antal biblios per batch (standard: 100)
+- `--delay=N` - Fördröjning mellan batchar i millisekunder (standard: 500)
+- `--limit=N` - Begränsa totalt antal biblios (för testning)
+- `--start-from=ID` - Börja från specifikt biblio_id (för återupptagning)
 
 **Förväntat output:**
 ```
@@ -97,7 +140,43 @@ php sync_koha_to_directus.php -v
 🔗 View at: https://nav.utvecklingfalkenberg.se/admin/content/kft_koha_biblios
 ```
 
-### Automatisk Synkronisering (Cron)
+### Performance och Rekommendationer
+
+### Katalogstorlek och Tiduppskattning
+
+Baserat på analys av Koha-katalogen (2026-01-23):
+
+- **Totalt antal biblios**: ~71,069
+- **Biblio ID-spann**: 2 till 71,069
+- **Optimal batch size**: 100 (9ms/item från Koha API)
+- **Full sync-tid**: ~3.8 timmar
+  - Koha API-hämtning: 10.5 minuter
+  - Directus-synkronisering: 213.2 minuter
+  - Fördröjningar (500ms): 5.9 minuter
+- **API-belastning**: 711 requests, 1 request var ~1.4 sekund
+
+### Rekommendationer
+
+✅ **För initial setup**:
+1. Kör först testsynk (100 böcker) för att verifiera
+2. Kör sedan full sync nattetid (02:00-05:00)
+3. Använd verbose mode för att övervaka progress
+
+✅ **För återkommande synkronisering**:
+- **Dagligt**: Använd testsynk (100 nyaste böcker) för att fånga nya titlar
+- **Månatligt**: Kör full sync för att säkerställa fullständig synkronisering
+
+✅ **System load considerations**:
+- Full sync är skonsam: 1 request var 1.4 sekund
+- 500ms fördröjningar mellan batchar minskar belastning
+- Koha är verksamhetskritiskt - kör alltid nattetid
+
+⚠️ **Viktigt**:
+- Koör aldrig full sync under kontorstid (08:00-17:00)
+- Övervaka första full sync manuellt
+- Använd `--limit` för att testa med mindre dataset först
+
+## Automatisk Synkronisering (Cron)
 
 #### Setup Crontab
 
@@ -105,7 +184,16 @@ php sync_koha_to_directus.php -v
 # Redigera crontab
 crontab -e
 
-# Lägg till följande rad för daglig körning kl 03:00
+# Daglig testsynk (100 nyaste böcker) kl 03:00
+0 3 * * * cd /home/httpd/fbg-intranet/integrationer/integration-koha-web/directus && php sync_koha_to_directus.php >> sync.log 2>&1
+
+# Månatlig full sync (hela katalogen) första söndagen kl 02:00
+0 2 * * 0 [ $(date +\%d) -le 7 ] && cd /home/httpd/fbg-intranet/integrationer/integration-koha-web/directus && php sync_koha_to_directus_full.php >> sync_full.log 2>&1
+```
+
+**Alternativt**, använd den befintliga cron-wrappern som inkluderar log rotation:
+```bash
+# Daglig körning med wrapper
 0 3 * * * /home/httpd/fbg-intranet/integrationer/integration-koha-web/directus/sync_cron.sh
 ```
 
@@ -124,7 +212,7 @@ tail -f directus/sync.log
 
 ## Collection Schema
 
-### kft_koha_biblios (25 fält)
+### kft_koha_biblios (30 fält)
 
 | Fält | Typ | Beskrivning |
 |------|-----|-------------|
@@ -146,7 +234,13 @@ tail -f directus/sync.log
 | `series_title` | string | Serietitel |
 | `age_restriction` | string | Åldersrestriktion |
 | `ean` | string | EAN-kod |
+| `issn` | string | ISSN för serials |
 | `notes` | text | Anteckningar |
+| `creation_date` | date | Datum när posten skapades i Koha |
+| `koha_timestamp` | timestamp | Senaste ändringen i Koha |
+| `copyright_date` | string | Upphovsrättsår |
+| `lc_control_number` | string | Library of Congress kontrollnummer |
+| `serial` | boolean | Om det är en serial |
 | `url` | string | Extern URL |
 | `catalog_link` | string | URL till Koha katalogpost |
 | `image_url` | string | Syndetics bild-URL |
@@ -156,6 +250,8 @@ tail -f directus/sync.log
 
 ## Dataflöde
 
+### Testsynk (sync_koha_to_directus.php)
+
 1. **OAuth-autentisering** mot Koha API
 2. **Hämta 100 biblios** från `/api/v1/biblios?_order_by=-biblio_id&_per_page=100`
 3. **Transform** Koha-fält till Directus-format
@@ -163,6 +259,20 @@ tail -f directus/sync.log
 5. **CREATE/UPDATE** biblios i Directus
 6. **SOFT DELETE** böcker som inte längre finns (status='inactive')
 7. **Statistik** och rapportering
+
+### Full Katalogsynk (sync_koha_to_directus_full.php)
+
+1. **OAuth-autentisering** mot Koha API
+2. **Hämta första batch** för att få totalt antal (X-Total-Count header)
+3. **Beräkna totalt antal batchar** (~711 batchar för 71,069 böcker med batch size 100)
+4. **Hämta alla batchar** med paginering (`_page=1,2,3...`)
+5. **För varje biblio**:
+   - Transform Koha-fält till Directus-format
+   - Försök UPDATE först (snabbare efter initial sync)
+   - Vid 404: CREATE ny post
+   - Progress-rapportering med ETA
+6. **500ms fördröjning** mellan varje batch (mjuk belastning på Koha)
+7. **Statistik** med rate och duration
 
 ## Funktioner
 
@@ -209,13 +319,14 @@ curl -H "Authorization: Bearer fGw_FW-mzf7BxRAbcRhj3EMS-rc3CoAZ" \
 
 ```
 directus/
-├── DirectusClient.php                  # Directus API-klient (cURL-baserad)
-├── create_koha_biblios_collection.php  # Skapa collection (kör en gång)
-├── sync_koha_to_directus.php           # Huvudsynk-script
-├── sync_cron.sh                        # Cron-wrapper med loggning
-├── sync.log                            # Huvudlogg (skapas automatiskt)
-├── sync_errors.log                     # Fellogg (skapas vid fel)
-└── README.md                           # Denna fil
+├── DirectusClient.php                     # Directus API-klient (cURL-baserad)
+├── create_koha_biblios_collection.php     # Skapa collection (kör en gång)
+├── sync_koha_to_directus.php              # Testsynk (100 böcker)
+├── sync_koha_to_directus_full.php         # Full katalogsynk (~71,000 böcker)
+├── sync_cron.sh                           # Cron-wrapper med loggning
+├── sync.log                               # Huvudlogg (skapas automatiskt)
+├── sync_errors.log                        # Fellogg (skapas vid fel)
+└── README.md                              # Denna fil
 ```
 
 ## Felsökning
@@ -241,15 +352,14 @@ Directus PATCH failed (HTTP 403): {"errors":[{"message":"Forbidden"}]}
 
 ## Begränsningar
 
-- **Max 100 böcker** per synkronisering (kan ökas vid behov)
 - **Endast URL:er** för bokomslag (inga faktiska bilder laddas upp)
-- **Ingen paginering** för närvarande (tar senaste 100 böckerna)
+- **Full sync tar ~3.8 timmar** (rekommenderas att köras nattetid 02:00-05:00)
 
 ## Framtida Förbättringar
 
-1. **Paginering** - Synka alla böcker i Koha-systemet
+1. ~~**Paginering**~~ - ✅ Implementerat (sync_koha_to_directus_full.php)
 2. **Bild-uppladdning** - Ladda upp faktiska bilder till Directus Assets
-3. **Inkrementell sync** - Endast synka ändrade böcker
+3. **Inkrementell sync** - Endast synka ändrade böcker (kräver timestamp i Koha)
 4. **Relationer** - Koppla till författare/förlag collections
 5. **Webbhooks** - Trigga sync vid nya böcker i Koha
 
@@ -260,5 +370,8 @@ För frågor och support, kontakta utvecklingsteamet på Falkenbergs kommun.
 ---
 
 **Skapad**: 2026-01-23
-**Version**: 1.0
-**Status**: ✅ Fungerar - 100 böcker synkroniserade framgångsrikt
+**Senast uppdaterad**: 2026-01-23
+**Version**: 1.1
+**Status**: ✅ Fullt fungerande
+- Testsynk: 100 böcker (17.91s)
+- Full katalogsynk: ~71,000 böcker (~3.8 timmar)

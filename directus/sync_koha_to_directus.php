@@ -20,6 +20,21 @@ require_once __DIR__ . '/../common.php';
 require_once __DIR__ . '/DirectusClient.php';
 
 /**
+ * Safely truncate string to max length
+ */
+function safeTruncate($value, $maxLength)
+{
+    if ($value === null) {
+        return null;
+    }
+    $value = (string)$value;
+    if (mb_strlen($value) > $maxLength) {
+        return mb_substr($value, 0, $maxLength);
+    }
+    return $value;
+}
+
+/**
  * Transform Koha API data to Directus format
  *
  * @param array $kohaBook Koha API biblio data
@@ -42,41 +57,49 @@ function transformKohaToDirectus($kohaBook)
         'biblio_id' => $kohaBook['biblio_id'],
 
         // ISBN fields
-        'isbn' => $kohaBook['isbn'] ?? null,
-        'isbn_clean' => $firstIsbn,
+        'isbn' => safeTruncate($kohaBook['isbn'] ?? null, 255),
+        'isbn_clean' => safeTruncate($firstIsbn, 50),
 
         // Core bibliographic fields
-        'title' => cleanTitle($kohaBook['title'] ?? null),
-        'author' => $kohaBook['author'] ?? null,
-        'abstract' => $kohaBook['abstract'] ?? null,
-        'subtitle' => $kohaBook['subtitle'] ?? null,
+        'title' => safeTruncate(cleanTitle($kohaBook['title'] ?? null), 500),
+        'author' => safeTruncate($kohaBook['author'] ?? null, 255),
+        'abstract' => $kohaBook['abstract'] ?? null, // text field, no limit
+        'subtitle' => safeTruncate($kohaBook['subtitle'] ?? null, 500),
 
         // Publication fields
-        'publisher' => $kohaBook['publisher'] ?? null,
-        'publication_year' => $kohaBook['publication_year'] ?? null,
-        'publication_place' => $kohaBook['publication_place'] ?? null,
+        'publisher' => safeTruncate($kohaBook['publisher'] ?? null, 255),
+        'publication_year' => safeTruncate($kohaBook['publication_year'] ?? null, 50),
+        'publication_place' => safeTruncate($kohaBook['publication_place'] ?? null, 255),
 
         // Physical description
-        'pages' => $kohaBook['pages'] ?? null,
-        'material_size' => $kohaBook['material_size'] ?? null,
+        'pages' => safeTruncate($kohaBook['pages'] ?? null, 100),
+        'material_size' => safeTruncate($kohaBook['material_size'] ?? null, 100),
 
         // Edition and series
-        'edition_statement' => $kohaBook['edition_statement'] ?? null,
-        'series_title' => $kohaBook['series_title'] ?? null,
+        'edition_statement' => safeTruncate($kohaBook['edition_statement'] ?? null, 255),
+        'series_title' => safeTruncate($kohaBook['series_title'] ?? null, 255),
 
         // Additional metadata
-        'age_restriction' => $kohaBook['age_restriction'] ?? null,
-        'ean' => $kohaBook['ean'] ?? null,
-        'notes' => $kohaBook['notes'] ?? null,
+        'age_restriction' => safeTruncate($kohaBook['age_restriction'] ?? null, 50),
+        'ean' => safeTruncate($kohaBook['ean'] ?? null, 50),
+        'issn' => safeTruncate($kohaBook['issn'] ?? null, 50),
+        'notes' => $kohaBook['notes'] ?? null, // text field, no limit
+
+        // Koha timestamps and metadata
+        'creation_date' => $kohaBook['creation_date'] ?? null,
+        'koha_timestamp' => $kohaBook['timestamp'] ?? null,
+        'copyright_date' => safeTruncate($kohaBook['copyright_date'] ?? null, 50),
+        'lc_control_number' => safeTruncate($kohaBook['lc_control_number'] ?? null, 100),
+        'serial' => $kohaBook['serial'] ?? false,
 
         // URLs
-        'url' => $kohaBook['url'] ?? null,
-        'catalog_link' => $catalogLink,
+        'url' => safeTruncate($kohaBook['url'] ?? null, 1000),
+        'catalog_link' => safeTruncate($catalogLink, 500),
 
         // Image fields (URLs only, no file upload)
-        'image_url' => $imageUrl,
-        'image_cached' => $imageCached,
-        'image_cached_url' => $imageCachedUrl,
+        'image_url' => safeTruncate($imageUrl, 1000),
+        'image_cached' => safeTruncate($imageCached, 500),
+        'image_cached_url' => safeTruncate($imageCachedUrl, 1000),
 
         // Raw data for future use
         'raw_data' => $kohaBook,
@@ -269,8 +292,8 @@ function main()
                 $existing = $existingById[$biblioId] ?? null;
 
                 if ($existing) {
-                    // Update existing
-                    $directusClient->updateItem($collectionName, $biblioId, $directusData);
+                    // Update existing - use Directus id, not biblio_id!
+                    $directusClient->updateItem($collectionName, $existing['id'], $directusData);
                     $stats['updated']++;
                 } else {
                     // Create new
@@ -295,11 +318,13 @@ function main()
 
         foreach ($existingBiblios as $existing) {
             $biblioId = $existing['biblio_id'];
+            $directusId = $existing['id'];
 
             // If biblio no longer exists in Koha and is currently active
             if (!in_array($biblioId, $kohaIds) && $existing['status'] === 'active') {
                 try {
-                    $directusClient->updateItem($collectionName, $biblioId, [
+                    // Use Directus id, not biblio_id!
+                    $directusClient->updateItem($collectionName, $directusId, [
                         'status' => 'inactive',
                         'last_synced' => date('Y-m-d H:i:s')
                     ]);

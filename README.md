@@ -16,6 +16,7 @@ Detta system hämtar RSS-feeds från Falkenbergs biblioteks Koha-system, autenti
 - **Format-alternativ**: Returnerar data i JSON eller XML baserat på förfrågan
 - **Filbaserad cache**: 1-timmars cache för snabba svar
 - **CORS-aktiverad**: Tillgänglig för frontends på andra domäner
+- **Directus-integration**: Synkronisera bokdata till Directus för avancerad datahantering (se [directus/README.md](directus/README.md))
 
 ## Installation
 
@@ -54,6 +55,10 @@ SYNDETICS_CLIENT=bibfalken
 
 # Cache-inställningar (i sekunder)
 CACHE_TTL_LATEST=3600
+
+# Directus Configuration (valfritt - för Koha biblios sync)
+DIRECTUS_API_URL=https://your-directus-url.com
+DIRECTUS_API_TOKEN=your-directus-api-token-here
 ```
 
 4. **Säkerställ katalogstrukturen**

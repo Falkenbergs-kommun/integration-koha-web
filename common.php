@@ -97,7 +97,13 @@ function getBookDataFromApi($biblioId, $apiBaseUrl, $apiToken) {
             'age_restriction' => $data['age_restriction'] ?? null,
             'url' => $data['url'] ?? null,
             'ean' => $data['ean'] ?? null,
-            'notes' => $data['notes'] ?? null
+            'issn' => $data['issn'] ?? null,
+            'notes' => $data['notes'] ?? null,
+            'creation_date' => $data['creation_date'] ?? null,
+            'timestamp' => $data['timestamp'] ?? null,
+            'copyright_date' => $data['copyright_date'] ?? null,
+            'lc_control_number' => $data['lc_control_number'] ?? null,
+            'serial' => $data['serial'] ?? null
         ];
     }
 
@@ -117,7 +123,13 @@ function getBookDataFromApi($biblioId, $apiBaseUrl, $apiToken) {
         'age_restriction' => null,
         'url' => null,
         'ean' => null,
-        'notes' => null
+        'issn' => null,
+        'notes' => null,
+        'creation_date' => null,
+        'timestamp' => null,
+        'copyright_date' => null,
+        'lc_control_number' => null,
+        'serial' => null
     ];
 }
 

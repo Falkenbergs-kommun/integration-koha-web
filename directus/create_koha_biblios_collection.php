@@ -252,10 +252,66 @@ function getFieldDefinitions()
             'schema' => ['is_nullable' => true, 'max_length' => 50]
         ],
         [
+            'field' => 'issn',
+            'type' => 'string',
+            'meta' => ['interface' => 'input', 'width' => 'quarter'],
+            'schema' => ['is_nullable' => true, 'max_length' => 50]
+        ],
+        [
             'field' => 'notes',
             'type' => 'text',
             'meta' => ['interface' => 'input-multiline', 'width' => 'full'],
             'schema' => ['is_nullable' => true]
+        ],
+
+        // Koha timestamps and metadata
+        [
+            'field' => 'creation_date',
+            'type' => 'date',
+            'meta' => [
+                'interface' => 'datetime',
+                'readonly' => true,
+                'width' => 'half',
+                'display' => 'datetime',
+                'display_options' => ['relative' => true]
+            ],
+            'schema' => ['is_nullable' => true]
+        ],
+        [
+            'field' => 'koha_timestamp',
+            'type' => 'timestamp',
+            'meta' => [
+                'interface' => 'datetime',
+                'readonly' => true,
+                'width' => 'half',
+                'display' => 'datetime',
+                'display_options' => ['relative' => true]
+            ],
+            'schema' => ['is_nullable' => true]
+        ],
+        [
+            'field' => 'copyright_date',
+            'type' => 'string',
+            'meta' => ['interface' => 'input', 'width' => 'quarter'],
+            'schema' => ['is_nullable' => true, 'max_length' => 50]
+        ],
+        [
+            'field' => 'lc_control_number',
+            'type' => 'string',
+            'meta' => ['interface' => 'input', 'width' => 'quarter'],
+            'schema' => ['is_nullable' => true, 'max_length' => 100]
+        ],
+        [
+            'field' => 'serial',
+            'type' => 'boolean',
+            'meta' => [
+                'interface' => 'boolean',
+                'width' => 'quarter'
+            ],
+            'schema' => [
+                'is_nullable' => true,
+                'default_value' => false
+            ]
         ],
 
         // URLs
