@@ -24,7 +24,7 @@ header('Access-Control-Allow-Origin: *');
 header('Cache-Control: no-cache, must-revalidate');
 
 // Cache-fil baserat på shelfnumber och format
-$cacheFile = __DIR__ . "/cache_shelf{$shelfNumber}_{$format}.cache";
+$cacheFile = __DIR__ . "/cache/cache_shelf{$shelfNumber}_{$format}.cache";
 $cacheMaxAge = 3600; // Cache i 1 timme
 
 // Kolla om cache finns och är giltig

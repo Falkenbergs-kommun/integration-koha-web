@@ -32,7 +32,7 @@ if (!is_numeric($listId)) {
 }
 
 // Cache-fil baserad på lista-ID
-$cacheFile = __DIR__ . '/cache_list_' . $listId . '.json';
+$cacheFile = __DIR__ . '/cache/cache_list_' . $listId . '.json';
 $cacheMaxAge = 3600; // Cache i 1 timme
 
 // Kolla om cache finns och är giltig

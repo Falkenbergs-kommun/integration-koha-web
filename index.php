@@ -9,7 +9,7 @@ header('Content-Type: application/json; charset=utf-8');
 header('Access-Control-Allow-Origin: *');
 header('Cache-Control: no-cache, must-revalidate');
 
-$cacheFile = __DIR__ . '/cache.json';
+$cacheFile = __DIR__ . '/cache/cache.json';
 $cacheMaxAge = 3600; // Cache i 1 timme
 
 // Kolla om cache finns och är giltig

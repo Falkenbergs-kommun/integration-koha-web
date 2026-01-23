@@ -24,7 +24,7 @@ header('Access-Control-Allow-Origin: *');
 header('Cache-Control: no-cache, must-revalidate');
 
 // Cache-fil baserat på format och antal
-$cacheFile = __DIR__ . "/cache_latest_{$limit}_{$format}.cache";
+$cacheFile = __DIR__ . "/cache/cache_latest_{$limit}_{$format}.cache";
 $cacheMaxAge = intval(getenv('CACHE_TTL_LATEST') ?: 3600); // Standard 1 timme
 
 // Kolla om cache finns och är giltig

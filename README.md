@@ -58,8 +58,10 @@ CACHE_TTL_LATEST=3600
 
 4. **Säkerställ katalogstrukturen**
 ```bash
-# Cache-katalogen skapas automatiskt
-# Bildkatalogen skapas automatiskt vid första körning
+# Skapa cache-katalog
+mkdir -p cache
+
+# Cache- och bildkatalogerna skapas automatiskt vid första körning om de inte finns
 ```
 
 5. **Sätt rättigheter**
@@ -131,7 +133,24 @@ https://bibliotek.falkenberg.se/fbg_apps/services/koha/latest.php?format=xml
 https://bibliotek.falkenberg.se/fbg_apps/services/koha/latest.php?limit=20&format=xml
 ```
 
-#### 5. **debug.php** - Utvecklingsverktyg för RSS-felsökning
+#### 5. **book.php** - Hämta data om en enskild bok (NYTT)
+
+**JSON-format (default):**
+```bash
+# Hämta bok med specifikt biblionumber
+https://bibliotek.falkenberg.se/fbg_apps/services/koha/book.php?biblionumber=39141
+
+# Med format specificerat
+https://bibliotek.falkenberg.se/fbg_apps/services/koha/book.php?biblionumber=39141&format=json
+```
+
+**XML-format:**
+```bash
+# Hämta bok i XML-format
+https://bibliotek.falkenberg.se/fbg_apps/services/koha/book.php?biblionumber=39141&format=xml
+```
+
+#### 6. **debug.php** - Utvecklingsverktyg för RSS-felsökning
 
 ```bash
 https://bibliotek.falkenberg.se/fbg_apps/services/koha/debug.php
@@ -142,13 +161,14 @@ https://bibliotek.falkenberg.se/fbg_apps/services/koha/debug.php
 | Parameter | Värden | Standard | Beskrivning |
 |-----------|--------|----------|-------------|
 | `shelfnumber` | integer | 247 | Kohas shelf-ID (shelf.php) |
-| `format` | json, xml | json | Svarsformat (shelf.php, latest.php) |
+| `biblionumber` | integer | - | Kohas biblio-ID (book.php) **Obligatorisk** |
+| `format` | json, xml | json | Svarsformat (shelf.php, latest.php, book.php) |
 | `id` | integer | - | List-ID (endast list.php) |
 | `limit` | integer | 10 | Antal böcker, max 50 (endast latest.php) |
 
 ### Exempel på svar
 
-**JSON-struktur:**
+**JSON-struktur (shelf.php, latest.php, list.php, index.php):**
 ```json
 {
   "status": "ok",
@@ -193,7 +213,7 @@ https://bibliotek.falkenberg.se/fbg_apps/services/koha/debug.php
 }
 ```
 
-**XML-struktur:**
+**XML-struktur (shelf.php, latest.php, list.php, index.php):**
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
 <response>
@@ -218,6 +238,57 @@ https://bibliotek.falkenberg.se/fbg_apps/services/koha/debug.php
       <!-- ... fler fält ... -->
     </item>
   </items>
+</response>
+```
+
+**JSON-struktur för enskild bok (book.php):**
+```json
+{
+  "status": "ok",
+  "cached_at": "2026-01-23 08:51:09",
+  "biblio_id": 39141,
+  "isbn": "9780241460689",
+  "isbn_clean": "9780241460689",
+  "title": "Big boned",
+  "author": "Watson, Jo",
+  "abstract": "After her parents' divorce, city girl Lori Palmer has been dragged across the country...",
+  "subtitle": null,
+  "publisher": null,
+  "publication_year": null,
+  "publication_place": null,
+  "pages": "374 sidor",
+  "material_size": "20 cm.",
+  "edition_statement": null,
+  "series_title": null,
+  "age_restriction": null,
+  "url": null,
+  "ean": null,
+  "notes": null,
+  "image_url": "https://secure.syndetics.com/index.aspx?isbn=9780241460689/LC.JPG&client=bibfalken&type=xw12",
+  "image_cached": "images/9780241460689.jpg",
+  "image_cached_url": "https://bibliotek.falkenberg.se/fbg_apps/services/koha/images/9780241460689.jpg",
+  "catalog_link": "https://bibliotekskatalog.falkenberg.se/cgi-bin/koha/opac-detail.pl?biblionumber=39141"
+}
+```
+
+**XML-struktur för enskild bok (book.php):**
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<response>
+  <status>ok</status>
+  <cached_at>2026-01-23 08:51:19</cached_at>
+  <biblio_id>39141</biblio_id>
+  <isbn>9780241460689</isbn>
+  <isbn_clean>9780241460689</isbn_clean>
+  <title>Big boned</title>
+  <author>Watson, Jo</author>
+  <abstract>After her parents' divorce, city girl Lori Palmer has been dragged across the country...</abstract>
+  <pages>374 sidor</pages>
+  <material_size>20 cm.</material_size>
+  <image_url>https://secure.syndetics.com/index.aspx?isbn=9780241460689/LC.JPG&amp;client=bibfalken&amp;type=xw12</image_url>
+  <image_cached>images/9780241460689.jpg</image_cached>
+  <image_cached_url>https://bibliotek.falkenberg.se/fbg_apps/services/koha/images/9780241460689.jpg</image_cached_url>
+  <catalog_link>https://bibliotekskatalog.falkenberg.se/cgi-bin/koha/opac-detail.pl?biblionumber=39141</catalog_link>
 </response>
 ```
 
@@ -251,6 +322,7 @@ https://bibliotek.falkenberg.se/fbg_apps/services/koha/debug.php
 ```
 .
 ├── shelf.php            # Flexibel endpoint med shelfnumber och format-stöd
+├── book.php             # Endpoint för enskild bok med biblionumber
 ├── index.php            # Enkel endpoint (shelf 247, JSON)
 ├── list.php             # Dynamisk lista med ?id parameter
 ├── latest.php           # Senaste böckerna via API (nyinköp)
@@ -259,10 +331,12 @@ https://bibliotek.falkenberg.se/fbg_apps/services/koha/debug.php
 ├── .env                 # API-credentials och konfiguration (ej i git)
 ├── .env.example         # Mall för miljövariabler
 ├── .gitignore           # Git-undantag (cache, bilder, .env)
-├── cache.json           # JSON-cache för index.php
-├── cache_shelf*.cache   # Cache-filer per shelf och format
-├── cache_latest_*.cache # Cache-filer för latest.php
-├── cache_list_*.json    # Cache-filer för list.php
+├── cache/               # Cache-katalog för alla cache-filer
+│   ├── cache.json           # JSON-cache för index.php
+│   ├── cache_shelf*.cache   # Cache-filer per shelf och format
+│   ├── cache_book*.cache    # Cache-filer per biblionumber och format
+│   ├── cache_latest_*.cache # Cache-filer för latest.php
+│   └── cache_list_*.json    # Cache-filer för list.php
 ├── images/              # Cachade bokomslag (persistenta)
 ├── docs/                # API-dokumentation (OpenAPI)
 ├── CLAUDE.md            # Teknisk dokumentation för Claude Code
@@ -273,16 +347,19 @@ https://bibliotek.falkenberg.se/fbg_apps/services/koha/debug.php
 
 ### JSON/XML Response Cache
 
+- **Katalog**: `cache/`
 - **Filnamn**:
-  - `cache.json` (index.php)
-  - `cache_shelf{nummer}_{format}.cache` (shelf.php)
-  - `cache_list_{id}.json` (list.php)
-  - `cache_latest_{limit}_{format}.cache` (latest.php)
+  - `cache/cache.json` (index.php)
+  - `cache/cache_shelf{nummer}_{format}.cache` (shelf.php)
+  - `cache/cache_book{biblionumber}_{format}.cache` (book.php)
+  - `cache/cache_list_{id}.json` (list.php)
+  - `cache/cache_latest_{limit}_{format}.cache` (latest.php)
 - **TTL**:
-  - 1 timme (3600 sekunder) - default för index.php, shelf.php, list.php
+  - 1 timme (3600 sekunder) - default för index.php, shelf.php, book.php, list.php
   - Konfigurerbar via `CACHE_TTL_LATEST` för latest.php (default 3600)
 - **Invalidering**: Automatisk via filemtime-kontroll
 - **Läge**: Läs/skriv för webbserver
+- **Automatisk skapning**: Katalogen skapas automatiskt om den inte finns
 
 ### Bildcache
 
@@ -408,10 +485,13 @@ Besök `debug.php` för att se:
 
 ```bash
 # Rensa alla cache-filer
-rm cache*.json cache*.cache
+rm -rf cache/*
 
 # Rensa endast specifik shelf-cache
-rm cache_shelf247_*.cache
+rm cache/cache_shelf247_*.cache
+
+# Rensa endast bok-cache
+rm cache/cache_book*.cache
 
 # Rensa bildcache (VARNING: tar bort alla cachade bilder)
 rm -rf images/*
@@ -440,6 +520,7 @@ Följande värden ska **ALDRIG** committas:
 ```bash
 chmod 755 /path/to/integration-koha-web
 chmod 600 /path/to/integration-koha-web/.env
+chmod 755 /path/to/integration-koha-web/cache
 chmod 755 /path/to/integration-koha-web/images
 ```
 
@@ -449,10 +530,16 @@ chmod 755 /path/to/integration-koha-web/images
 
 ```bash
 # Se ålder på cache-fil
-ls -lh cache_shelf247_json.cache
+ls -lh cache/cache_shelf247_json.cache
 
 # Visa cache-innehåll
-cat cache_shelf247_json.cache | jq .
+cat cache/cache_shelf247_json.cache | jq .
+
+# Lista alla cache-filer
+ls -lh cache/
+
+# Antal cachade filer
+ls -1 cache/ | wc -l
 
 # Antal cachade bilder
 ls -1 images/ | wc -l
@@ -497,6 +584,12 @@ A: `shelf.php` hämtar böcker från en specifik boklista (shelf) via RSS. `late
 **Q: Hur bestäms vilka böcker som är "senaste" i latest.php?**
 A: Böckerna sorteras på biblio_id i fallande ordning (-biblio_id), vilket ger de senast tillagda posterna i Koha-systemet.
 
+**Q: Vad är skillnaden mellan book.php och andra endpoints?**
+A: `book.php` hämtar data för en enskild, specifik bok baserat på biblionumber. Övriga endpoints (shelf.php, latest.php, list.php) returnerar listor med flera böcker. Använd book.php när du vet exakt vilket biblionumber du vill hämta data för.
+
+**Q: Var hittar jag ett biblionumber?**
+A: Biblionumber finns i URL:en på bibliotekskatalogen (t.ex. `opac-detail.pl?biblionumber=39141`), eller i responsen från andra endpoints som `biblio_id`-fältet.
+
 ## Licens
 
 Internt projekt för Falkenbergs kommun.
@@ -507,4 +600,4 @@ För frågor och support, kontakta Utvecklingsavdelningen på Falkenbergs kommun
 
 ---
 
-*Senast uppdaterad: 2026-01-20*
+*Senast uppdaterad: 2026-01-23*
