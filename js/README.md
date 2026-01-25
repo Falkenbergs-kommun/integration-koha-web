@@ -53,8 +53,14 @@ Byt ut `"1"` mot ditt shelf-id.
 
 ### Grundläggande exempel
 
+**Visa böcker från en bokhylla:**
 ```html
 <div class="koha-shelf" data-shelf-id="1"></div>
+```
+
+**Visa senaste inköpen:**
+```html
+<div class="koha-shelf" data-source="latest"></div>
 ```
 
 ### Med anpassningar
@@ -72,7 +78,8 @@ Byt ut `"1"` mot ditt shelf-id.
 
 | Attribut | Typ | Standard | Beskrivning |
 |----------|-----|----------|-------------|
-| `data-shelf-id` | number | - | **Obligatoriskt.** ID för bokhyllan från Koha |
+| `data-source` | string | shelf | Källa: `shelf` (bokhylla) eller `latest` (senaste inköp) |
+| `data-shelf-id` | number | - | **Obligatoriskt för shelf.** ID för bokhyllan från Koha |
 | `data-columns` | number | 3 | Antal kolumner (2, 3, 4, 5, eller 6) |
 | `data-card-size` | string | default | Kortstorlek: `small`, `default`, `large` |
 | `data-max-books` | number | - | Max antal böcker att visa (slumpar om fler finns) |
@@ -98,6 +105,23 @@ Byt ut `"1"` mot ditt shelf-id.
 **6 kolumner (mycket kompakt):**
 ```html
 <div class="koha-shelf" data-shelf-id="1" data-columns="6"></div>
+```
+
+### Exempel med senaste inköp
+
+**Visa senaste inköpen (standard 10 böcker):**
+```html
+<div class="koha-shelf" data-source="latest"></div>
+```
+
+**Visa 6 senaste inköpen i 3 kolumner:**
+```html
+<div class="koha-shelf" data-source="latest" data-max-books="6"></div>
+```
+
+**Visa 12 senaste inköpen i 4 kolumner:**
+```html
+<div class="koha-shelf" data-source="latest" data-columns="4" data-max-books="12"></div>
 ```
 
 ### Exempel med olika kortstorlekar
@@ -154,16 +178,21 @@ Widgeten visar automatiskt:
 
 Varje bokkort innehåller:
 - ✅ Bokomslag (enhetlig höjd 400px, anpassad för portrait-format, med fallback om saknas)
-- ✅ Titel (klickbar länk)
+- ✅ Titel
 - ✅ Författare
 - ✅ Beskrivning/abstract (trunkerad till 150 tecken)
-- ✅ "Visa i katalogen"-knapp (öppnas i ny flik)
+- ✅ Hela kortet är klickbart och öppnar boken i katalogen (ny flik)
 
 **Bildhantering:**
 - Alla bokomslag visas med samma höjd (400px) för enhetligt utseende
 - Bilder använder `object-fit: cover` för att fylla utrymmet utan att förvrängas
 - Optimerad för portrait-format (standard bokformat 2:3)
 - Texten börjar alltid på samma nivå oavsett bildens ursprungliga storlek
+
+**Interaktion:**
+- Hover-effekt visar att kortet är klickbart
+- Klick på vilket ställe som helst på kortet öppnar boken i bibliotekskatalogen
+- Öppnas i ny flik för att behålla kontexten
 
 ## API-integration
 

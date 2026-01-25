@@ -1,20 +1,22 @@
 /**
  * Koha Shelf Display Widget
  *
- * Displays books from a Koha shelf as UIkit 3 cards
+ * Displays books from a Koha shelf or latest books as UIkit 3 cards
  * Designed for Yootheme Pro in Joomla
  *
  * Usage:
  * <div class="koha-shelf" data-shelf-id="123"></div>
+ * <div class="koha-shelf" data-source="latest"></div>
  *
  * Options (data attributes):
- * - data-shelf-id: Required. The shelf ID to load
+ * - data-shelf-id: Required for shelf source. The shelf ID to load
+ * - data-source: Optional. Source type: "shelf" (default) or "latest"
  * - data-api-url: Optional. Base URL for API (default: auto-detect)
  * - data-columns: Optional. Number of columns (2,3,4,5,6). Default: 3
  * - data-card-size: Optional. Card size (small, default, large). Default: default
  * - data-max-books: Optional. Max number of books to display (randomly selected if more available)
  *
- * @version 1.1.0
+ * @version 1.2.0
  * @license MIT
  */
 
@@ -36,27 +38,36 @@
 
         shelves.forEach(function(shelfElement) {
             shelfElement.classList.add('koha-shelf-initialized');
+            const source = shelfElement.getAttribute('data-source') || 'shelf';
             const shelfId = shelfElement.getAttribute('data-shelf-id');
 
-            if (!shelfId) {
+            // Validate parameters based on source
+            if (source === 'shelf' && !shelfId) {
                 showError(shelfElement, 'Inget shelf-id angivet. Använd data-shelf-id="123"');
                 return;
             }
 
-            loadShelf(shelfElement, shelfId);
+            loadShelf(shelfElement, source, shelfId);
         });
     }
 
     /**
      * Load shelf data from API
      */
-    function loadShelf(container, shelfId) {
+    function loadShelf(container, source, shelfId) {
         // Show loading state
         showLoading(container);
 
         // Get API URL
         const apiUrl = getApiUrl(container);
-        const url = `${apiUrl}/shelf.php?shelfnumber=${encodeURIComponent(shelfId)}`;
+
+        // Build URL based on source
+        let url;
+        if (source === 'latest') {
+            url = `${apiUrl}/latest.php`;
+        } else {
+            url = `${apiUrl}/shelf.php?shelfnumber=${encodeURIComponent(shelfId)}`;
+        }
 
         // Fetch data asynchronously
         fetch(url)
@@ -74,7 +85,7 @@
                 renderShelf(container, data);
             })
             .catch(function(error) {
-                showError(container, 'Kunde inte ladda bokhyllan: ' + error.message);
+                showError(container, 'Kunde inte ladda böckerna: ' + error.message);
             });
     }
 
@@ -145,32 +156,16 @@
         const cardSize = container.getAttribute('data-card-size') || CONFIG.defaultCardSize;
         const maxBooks = parseInt(container.getAttribute('data-max-books')) || null;
 
-        // Start building HTML
-        let html = '';
-
         // Get books array - support both 'items' (shelf.php) and 'books' format
         let books = data.items || data.books || [];
 
-        // Shelf header (optional) - try both shelf_name and channel.title
-        const shelfName = data.shelf_name || (data.channel && data.channel.title);
-        if (shelfName) {
-            html += `
-                <div class="uk-margin-medium-bottom">
-                    <h3 class="uk-heading-line uk-text-center">
-                        <span>${escapeHtml(shelfName)}</span>
-                    </h3>
-                </div>
-            `;
-        }
-
         // Check if we have books
         if (books.length === 0) {
-            html += `
+            container.innerHTML = `
                 <div class="uk-alert-primary" uk-alert>
-                    <p>Inga böcker finns i denna bokhylla.</p>
+                    <p>Inga böcker finns att visa.</p>
                 </div>
             `;
-            container.innerHTML = html;
             return;
         }
 
@@ -180,7 +175,7 @@
         }
 
         // Books grid
-        html += `<div class="uk-grid-match uk-child-width-1-${columns}@m uk-child-width-1-2@s" uk-grid>`;
+        let html = `<div class="uk-grid-match uk-child-width-1-${columns}@m uk-child-width-1-2@s" uk-grid>`;
 
         books.forEach(function(book) {
             html += renderBookCard(book, cardSize);
@@ -219,37 +214,24 @@
 
         return `
             <div>
-                <div class="uk-card uk-card-default uk-card-hover${cardSizeClass}">
-                    <div class="uk-card-media-top" style="height: 400px; overflow: hidden; display: flex; align-items: center; justify-content: center; background: #f5f5f5;">
-                        <a href="${escapeHtml(catalogLink)}" target="_blank" rel="noopener" style="width: 100%; height: 100%; display: block;">
+                <a href="${escapeHtml(catalogLink)}" target="_blank" rel="noopener" class="uk-link-reset" style="display: block; text-decoration: none; color: inherit;">
+                    <div class="uk-card uk-card-default uk-card-hover${cardSizeClass}" style="cursor: pointer;">
+                        <div class="uk-card-media-top" style="height: 400px; overflow: hidden; display: flex; align-items: center; justify-content: center; background: #f5f5f5;">
                             <img src="${escapeHtml(imageUrl)}"
                                  alt="${escapeHtml(title)}"
                                  onerror="this.src='${CONFIG.placeholderImage}'"
                                  loading="lazy"
                                  style="width: 100%; height: 100%; object-fit: cover; object-position: center;">
-                        </a>
-                    </div>
-                    <div class="uk-card-body">
-                        <h3 class="uk-card-title uk-margin-remove-bottom">
-                            <a href="${escapeHtml(catalogLink)}"
-                               target="_blank"
-                               rel="noopener"
-                               class="uk-link-reset">
+                        </div>
+                        <div class="uk-card-body">
+                            <h3 class="uk-card-title uk-margin-remove-bottom">
                                 ${escapeHtml(title)}
-                            </a>
-                        </h3>
-                        ${author ? `<p class="uk-text-meta uk-margin-remove-top">${escapeHtml(author)}</p>` : ''}
-                        ${abstract ? `<p class="uk-text-small uk-margin-small-top">${truncate(escapeHtml(abstract), 150)}</p>` : ''}
+                            </h3>
+                            ${author ? `<p class="uk-text-meta uk-margin-remove-top">${escapeHtml(author)}</p>` : ''}
+                            ${abstract ? `<p class="uk-text-small uk-margin-small-top">${truncate(escapeHtml(abstract), 150)}</p>` : ''}
+                        </div>
                     </div>
-                    <div class="uk-card-footer">
-                        <a href="${escapeHtml(catalogLink)}"
-                           target="_blank"
-                           rel="noopener"
-                           class="uk-button uk-button-text">
-                            Visa i katalogen
-                        </a>
-                    </div>
-                </div>
+                </a>
             </div>
         `;
     }

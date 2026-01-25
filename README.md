@@ -185,15 +185,21 @@ För att enkelt visa bokhyllor på din webbplats finns en färdig JavaScript-wid
 
 **2. Lägg till HTML-element:**
 ```html
+<!-- Visa böcker från en bokhylla -->
 <div class="koha-shelf" data-shelf-id="1"></div>
+
+<!-- Eller visa senaste inköpen -->
+<div class="koha-shelf" data-source="latest"></div>
 ```
 
 ### Funktioner
 
+- ✅ **Två källor** - Visa böcker från en bokhylla eller senaste inköpen
 - ✅ **Asynkron laddning** - Blockerar inte sidladdning
 - ✅ **Responsiv design** - Anpassar sig automatiskt till skärmstorlek
 - ✅ **UIkit 3 cards** - Snygga bokkort med hover-effekter
 - ✅ **Enhetlig bildhöjd** - Alla omslag visas med samma höjd (400px) för konsekvent layout
+- ✅ **Klickbara kort** - Hela kortet är klickbart och öppnar boken i katalogen
 - ✅ **Anpassningsbart** - Välj antal kolumner, kortstorlek och max antal böcker
 - ✅ **Slumpmässigt urval** - Visa ett begränsat antal slumpmässigt valda böcker
 - ✅ **Laddningsindikator** - UIkit spinner under laddning
@@ -204,6 +210,7 @@ För att enkelt visa bokhyllor på din webbplats finns en färdig JavaScript-wid
 
 ```html
 <div class="koha-shelf"
+     data-source="shelf"
      data-shelf-id="1"
      data-columns="3"
      data-card-size="default"
@@ -212,7 +219,8 @@ För att enkelt visa bokhyllor på din webbplats finns en färdig JavaScript-wid
 
 | Attribut | Värden | Standard | Beskrivning |
 |----------|--------|----------|-------------|
-| `data-shelf-id` | number | - | **Obligatoriskt.** Shelf-ID från Koha |
+| `data-source` | shelf, latest | shelf | Källa: shelf (bokhylla) eller latest (senaste inköp) |
+| `data-shelf-id` | number | - | **Obligatoriskt för shelf.** Shelf-ID från Koha |
 | `data-columns` | 2-6 | 3 | Antal kolumner på desktop |
 | `data-card-size` | small, default, large | default | Storlek på korten |
 | `data-max-books` | number | - | Max antal böcker (slumpar om fler finns) |
@@ -238,6 +246,11 @@ För att enkelt visa bokhyllor på din webbplats finns en färdig JavaScript-wid
 **Max 6 slumpmässigt valda böcker:**
 ```html
 <div class="koha-shelf" data-shelf-id="1" data-max-books="6"></div>
+```
+
+**Senaste inköpen (8 böcker i 4 kolumner):**
+```html
+<div class="koha-shelf" data-source="latest" data-columns="4" data-max-books="8"></div>
 ```
 
 ### Dokumentation
