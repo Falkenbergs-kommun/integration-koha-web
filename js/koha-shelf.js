@@ -97,7 +97,7 @@
         }
 
         // Fallback: assume API is at same domain
-        return window.location.origin + '/integrationer/integration-koha-web';
+        return window.location.origin + '/fbg_apps/services/koha';
     }
 
     /**
@@ -134,19 +134,23 @@
         // Start building HTML
         let html = '';
 
-        // Shelf header (optional)
-        if (data.shelf_name) {
+        // Get books array - support both 'items' (shelf.php) and 'books' format
+        const books = data.items || data.books || [];
+
+        // Shelf header (optional) - try both shelf_name and channel.title
+        const shelfName = data.shelf_name || (data.channel && data.channel.title);
+        if (shelfName) {
             html += `
                 <div class="uk-margin-medium-bottom">
                     <h3 class="uk-heading-line uk-text-center">
-                        <span>${escapeHtml(data.shelf_name)}</span>
+                        <span>${escapeHtml(shelfName)}</span>
                     </h3>
                 </div>
             `;
         }
 
         // Check if we have books
-        if (!data.books || data.books.length === 0) {
+        if (books.length === 0) {
             html += `
                 <div class="uk-alert-primary" uk-alert>
                     <p>Inga böcker finns i denna bokhylla.</p>
@@ -159,7 +163,7 @@
         // Books grid
         html += `<div class="uk-grid-match uk-child-width-1-${columns}@m uk-child-width-1-2@s" uk-grid>`;
 
-        data.books.forEach(function(book) {
+        books.forEach(function(book) {
             html += renderBookCard(book, cardSize);
         });
 
@@ -178,9 +182,12 @@
      */
     function renderBookCard(book, cardSize) {
         const imageUrl = book.image_cached_url || book.image_url || CONFIG.placeholderImage;
-        const title = book.title || 'Okänd titel';
-        const author = book.author || '';
-        const catalogLink = book.catalog_link || '#';
+        // Use api_title (cleaner) if available, fallback to title
+        const title = book.api_title || book.title || 'Okänd titel';
+        // Use api_author if available, fallback to author
+        const author = book.api_author || book.author || '';
+        // Use link for catalog link
+        const catalogLink = book.link || book.catalog_link || '#';
         const abstract = book.abstract || '';
 
         // Card size class
