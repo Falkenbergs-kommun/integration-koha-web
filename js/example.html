@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Koha Shelf Widget - Exempel</title>
+
+    <!-- UIkit CSS -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/uikit@3.16.26/dist/css/uikit.min.css" />
+
+    <!-- UIkit JS -->
+    <script src="https://cdn.jsdelivr.net/npm/uikit@3.16.26/dist/js/uikit.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/uikit@3.16.26/dist/js/uikit-icons.min.js"></script>
+
+    <!-- Koha Shelf Widget -->
+    <script src="koha-shelf.js" defer></script>
+
+    <style>
+        body {
+            background: #f8f8f8;
+            padding: 40px 0;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="uk-container">
+        <h1 class="uk-heading-medium uk-text-center">Koha Shelf Widget</h1>
+        <p class="uk-text-center uk-text-lead">Exempel på hur man visar bokhyllor från Koha</p>
+
+        <hr class="uk-margin-large">
+
+        <!-- Exempel 1: Standard 3-kolumner -->
+        <div class="uk-section">
+            <h2 class="uk-h3">Exempel 1: Standard (3 kolumner)</h2>
+            <div class="koha-shelf" data-shelf-id="1"></div>
+        </div>
+
+        <hr class="uk-divider-icon">
+
+        <!-- Exempel 2: 4 kolumner -->
+        <div class="uk-section">
+            <h2 class="uk-h3">Exempel 2: 4 kolumner</h2>
+            <div class="koha-shelf"
+                 data-shelf-id="2"
+                 data-columns="4"></div>
+        </div>
+
+        <hr class="uk-divider-icon">
+
+        <!-- Exempel 3: 2 kolumner med stora kort -->
+        <div class="uk-section">
+            <h2 class="uk-h3">Exempel 3: 2 kolumner med stora kort</h2>
+            <div class="koha-shelf"
+                 data-shelf-id="3"
+                 data-columns="2"
+                 data-card-size="large"></div>
+        </div>
+
+        <hr class="uk-margin-large">
+
+        <!-- Instruktioner -->
+        <div class="uk-section">
+            <h2 class="uk-h3">Instruktioner för Yootheme Pro / Joomla</h2>
+
+            <div class="uk-card uk-card-default uk-card-body">
+                <h3 class="uk-card-title">Steg 1: Lägg till JavaScript i Joomla</h3>
+                <p>I Joomla admin, gå till <strong>System → Global Configuration → Custom Code</strong> och lägg till:</p>
+                <pre class="uk-background-muted uk-padding-small"><code>&lt;script src="https://dev-intra.falkenberg.se/integrationer/integration-koha-web/js/koha-shelf.js" defer&gt;&lt;/script&gt;</code></pre>
+            </div>
+
+            <div class="uk-card uk-card-default uk-card-body uk-margin">
+                <h3 class="uk-card-title">Steg 2: Lägg till HTML-element i Yootheme Pro</h3>
+                <p>I Yootheme Pro page builder, lägg till ett <strong>HTML-element</strong> och klistra in:</p>
+                <pre class="uk-background-muted uk-padding-small"><code>&lt;div class="koha-shelf" data-shelf-id="1"&gt;&lt;/div&gt;</code></pre>
+                <p class="uk-text-small uk-text-muted uk-margin-small-top">Byt ut "1" mot det shelf-id du vill visa.</p>
+            </div>
+
+            <div class="uk-card uk-card-default uk-card-body uk-margin">
+                <h3 class="uk-card-title">Steg 3: Anpassa (valfritt)</h3>
+                <p>Du kan anpassa visningen med dessa attribut:</p>
+                <table class="uk-table uk-table-small uk-table-divider">
+                    <thead>
+                        <tr>
+                            <th>Attribut</th>
+                            <th>Värden</th>
+                            <th>Beskrivning</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><code>data-shelf-id</code></td>
+                            <td>nummer</td>
+                            <td><strong>Obligatoriskt.</strong> ID för bokhyllan</td>
+                        </tr>
+                        <tr>
+                            <td><code>data-columns</code></td>
+                            <td>2, 3, 4, 5, 6</td>
+                            <td>Antal kolumner (standard: 3)</td>
+                        </tr>
+                        <tr>
+                            <td><code>data-card-size</code></td>
+                            <td>small, default, large</td>
+                            <td>Storlek på korten (standard: default)</td>
+                        </tr>
+                        <tr>
+                            <td><code>data-api-url</code></td>
+                            <td>URL</td>
+                            <td>API bas-URL (auto-detekteras normalt)</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="uk-card uk-card-primary uk-card-body uk-margin">
+                <h3 class="uk-card-title">Exempel med alla alternativ:</h3>
+                <pre class="uk-background-muted uk-light uk-padding-small"><code>&lt;div class="koha-shelf"
+     data-shelf-id="1"
+     data-columns="4"
+     data-card-size="small"
+     data-api-url="https://dev-intra.falkenberg.se/integrationer/integration-koha-web"&gt;
+&lt;/div&gt;</code></pre>
+            </div>
+        </div>
+    </div>
+
+</body>
+</html>

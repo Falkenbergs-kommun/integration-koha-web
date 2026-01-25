@@ -16,6 +16,7 @@ Detta system hämtar RSS-feeds från Falkenbergs biblioteks Koha-system, autenti
 - **Format-alternativ**: Returnerar data i JSON eller XML baserat på förfrågan
 - **Filbaserad cache**: 1-timmars cache för snabba svar
 - **CORS-aktiverad**: Tillgänglig för frontends på andra domäner
+- **JavaScript Widget**: Färdig widget för Yootheme Pro/Joomla med UIkit 3 cards (se [js/README.md](js/README.md))
 - **Directus-integration**: Synkronisera bokdata till Directus för avancerad datahantering (se [directus/README.md](directus/README.md))
 
 ## Installation
@@ -170,6 +171,69 @@ https://bibliotek.falkenberg.se/fbg_apps/services/koha/debug.php
 | `format` | json, xml | json | Svarsformat (shelf.php, latest.php, book.php) |
 | `id` | integer | - | List-ID (endast list.php) |
 | `limit` | integer | 10 | Antal böcker, max 50 (endast latest.php) |
+
+## JavaScript Widget för Yootheme Pro / Joomla
+
+För att enkelt visa bokhyllor på din webbplats finns en färdig JavaScript-widget som använder UIkit 3 för snygg presentation.
+
+### Snabbstart
+
+**1. Inkludera JavaScript:**
+```html
+<script src="https://dev-intra.falkenberg.se/integrationer/integration-koha-web/js/koha-shelf.js" defer></script>
+```
+
+**2. Lägg till HTML-element:**
+```html
+<div class="koha-shelf" data-shelf-id="1"></div>
+```
+
+### Funktioner
+
+- ✅ **Asynkron laddning** - Blockerar inte sidladdning
+- ✅ **Responsiv design** - Anpassar sig automatiskt till skärmstorlek
+- ✅ **UIkit 3 cards** - Snygga bokkort med hover-effekter
+- ✅ **Anpassningsbart** - Välj antal kolumner och kortstorlek
+- ✅ **Laddningsindikator** - UIkit spinner under laddning
+- ✅ **Lazy loading** - Bilder laddas endast när synliga
+- ✅ **Felhantering** - Snygga felmeddelanden vid problem
+
+### Konfiguration
+
+```html
+<div class="koha-shelf"
+     data-shelf-id="1"
+     data-columns="3"
+     data-card-size="default"></div>
+```
+
+| Attribut | Värden | Standard | Beskrivning |
+|----------|--------|----------|-------------|
+| `data-shelf-id` | number | - | **Obligatoriskt.** Shelf-ID från Koha |
+| `data-columns` | 2-6 | 3 | Antal kolumner på desktop |
+| `data-card-size` | small, default, large | default | Storlek på korten |
+| `data-api-url` | url | auto | API bas-URL (auto-detekteras) |
+
+### Exempel
+
+**Standard (3 kolumner):**
+```html
+<div class="koha-shelf" data-shelf-id="1"></div>
+```
+
+**4 kolumner, små kort:**
+```html
+<div class="koha-shelf" data-shelf-id="1" data-columns="4" data-card-size="small"></div>
+```
+
+**2 kolumner, stora kort:**
+```html
+<div class="koha-shelf" data-shelf-id="1" data-columns="2" data-card-size="large"></div>
+```
+
+### Dokumentation
+
+Se [js/README.md](js/README.md) för fullständig dokumentation och [js/example.html](js/example.html) för live-exempel.
 
 ### Exempel på svar
 

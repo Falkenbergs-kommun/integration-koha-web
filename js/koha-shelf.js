@@ -1,0 +1,295 @@
+/**
+ * Koha Shelf Display Widget
+ *
+ * Displays books from a Koha shelf as UIkit 3 cards
+ * Designed for Yootheme Pro in Joomla
+ *
+ * Usage:
+ * <div class="koha-shelf" data-shelf-id="123"></div>
+ *
+ * Options (data attributes):
+ * - data-shelf-id: Required. The shelf ID to load
+ * - data-api-url: Optional. Base URL for API (default: auto-detect)
+ * - data-columns: Optional. Number of columns (2,3,4,5,6). Default: 3
+ * - data-card-size: Optional. Card size (small, default, large). Default: default
+ *
+ * @version 1.0.0
+ * @license MIT
+ */
+
+(function() {
+    'use strict';
+
+    // Configuration
+    const CONFIG = {
+        defaultColumns: 3,
+        defaultCardSize: 'default',
+        placeholderImage: 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="200" height="300"%3E%3Crect fill="%23ddd" width="200" height="300"/%3E%3Ctext fill="%23999" font-family="sans-serif" font-size="18" dy="150" dx="50"%3EIngen bild%3C/text%3E%3C/svg%3E'
+    };
+
+    /**
+     * Initialize all shelf widgets on the page
+     */
+    function initShelves() {
+        const shelves = document.querySelectorAll('.koha-shelf:not(.koha-shelf-initialized)');
+
+        shelves.forEach(function(shelfElement) {
+            shelfElement.classList.add('koha-shelf-initialized');
+            const shelfId = shelfElement.getAttribute('data-shelf-id');
+
+            if (!shelfId) {
+                showError(shelfElement, 'Inget shelf-id angivet. Använd data-shelf-id="123"');
+                return;
+            }
+
+            loadShelf(shelfElement, shelfId);
+        });
+    }
+
+    /**
+     * Load shelf data from API
+     */
+    function loadShelf(container, shelfId) {
+        // Show loading state
+        showLoading(container);
+
+        // Get API URL
+        const apiUrl = getApiUrl(container);
+        const url = `${apiUrl}/shelf.php?shelfnumber=${encodeURIComponent(shelfId)}`;
+
+        // Fetch data asynchronously
+        fetch(url)
+            .then(function(response) {
+                if (!response.ok) {
+                    throw new Error('HTTP ' + response.status);
+                }
+                return response.json();
+            })
+            .then(function(data) {
+                if (data.status === 'error') {
+                    throw new Error(data.message || 'Okänt fel');
+                }
+
+                renderShelf(container, data);
+            })
+            .catch(function(error) {
+                showError(container, 'Kunde inte ladda bokhyllan: ' + error.message);
+            });
+    }
+
+    /**
+     * Get API URL from data attribute or auto-detect
+     */
+    function getApiUrl(container) {
+        const apiUrl = container.getAttribute('data-api-url');
+        if (apiUrl) {
+            return apiUrl;
+        }
+
+        // Auto-detect based on current script location
+        const scripts = document.getElementsByTagName('script');
+        for (let i = 0; i < scripts.length; i++) {
+            const src = scripts[i].src;
+            if (src && src.indexOf('koha-shelf.js') !== -1) {
+                // Extract base URL (remove /js/koha-shelf.js)
+                return src.substring(0, src.lastIndexOf('/js/'));
+            }
+        }
+
+        // Fallback: assume API is at same domain
+        return window.location.origin + '/integrationer/integration-koha-web';
+    }
+
+    /**
+     * Show loading spinner
+     */
+    function showLoading(container) {
+        container.innerHTML = `
+            <div class="uk-text-center uk-padding">
+                <div uk-spinner="ratio: 2"></div>
+                <p class="uk-margin-small-top uk-text-muted">Laddar bokhylla...</p>
+            </div>
+        `;
+    }
+
+    /**
+     * Show error message
+     */
+    function showError(container, message) {
+        container.innerHTML = `
+            <div class="uk-alert-warning" uk-alert>
+                <a class="uk-alert-close" uk-close></a>
+                <p><span uk-icon="icon: warning"></span> ${escapeHtml(message)}</p>
+            </div>
+        `;
+    }
+
+    /**
+     * Render shelf with books
+     */
+    function renderShelf(container, data) {
+        const columns = parseInt(container.getAttribute('data-columns')) || CONFIG.defaultColumns;
+        const cardSize = container.getAttribute('data-card-size') || CONFIG.defaultCardSize;
+
+        // Start building HTML
+        let html = '';
+
+        // Shelf header (optional)
+        if (data.shelf_name) {
+            html += `
+                <div class="uk-margin-medium-bottom">
+                    <h3 class="uk-heading-line uk-text-center">
+                        <span>${escapeHtml(data.shelf_name)}</span>
+                    </h3>
+                </div>
+            `;
+        }
+
+        // Check if we have books
+        if (!data.books || data.books.length === 0) {
+            html += `
+                <div class="uk-alert-primary" uk-alert>
+                    <p>Inga böcker finns i denna bokhylla.</p>
+                </div>
+            `;
+            container.innerHTML = html;
+            return;
+        }
+
+        // Books grid
+        html += `<div class="uk-grid-match uk-child-width-1-${columns}@m uk-child-width-1-2@s" uk-grid>`;
+
+        data.books.forEach(function(book) {
+            html += renderBookCard(book, cardSize);
+        });
+
+        html += '</div>';
+
+        container.innerHTML = html;
+
+        // Reinitialize UIkit components
+        if (window.UIkit) {
+            UIkit.update(container);
+        }
+    }
+
+    /**
+     * Render a single book card
+     */
+    function renderBookCard(book, cardSize) {
+        const imageUrl = book.image_cached_url || book.image_url || CONFIG.placeholderImage;
+        const title = book.title || 'Okänd titel';
+        const author = book.author || '';
+        const catalogLink = book.catalog_link || '#';
+        const abstract = book.abstract || '';
+
+        // Card size class
+        let cardSizeClass = '';
+        if (cardSize === 'small') {
+            cardSizeClass = ' uk-card-small';
+        } else if (cardSize === 'large') {
+            cardSizeClass = ' uk-card-large';
+        }
+
+        return `
+            <div>
+                <div class="uk-card uk-card-default uk-card-hover${cardSizeClass}">
+                    <div class="uk-card-media-top">
+                        <a href="${escapeHtml(catalogLink)}" target="_blank" rel="noopener">
+                            <img src="${escapeHtml(imageUrl)}"
+                                 alt="${escapeHtml(title)}"
+                                 onerror="this.src='${CONFIG.placeholderImage}'"
+                                 loading="lazy"
+                                 class="uk-width-1-1">
+                        </a>
+                    </div>
+                    <div class="uk-card-body">
+                        <h3 class="uk-card-title uk-margin-remove-bottom">
+                            <a href="${escapeHtml(catalogLink)}"
+                               target="_blank"
+                               rel="noopener"
+                               class="uk-link-reset">
+                                ${escapeHtml(title)}
+                            </a>
+                        </h3>
+                        ${author ? `<p class="uk-text-meta uk-margin-remove-top">${escapeHtml(author)}</p>` : ''}
+                        ${abstract ? `<p class="uk-text-small uk-margin-small-top">${truncate(escapeHtml(abstract), 150)}</p>` : ''}
+                    </div>
+                    <div class="uk-card-footer">
+                        <a href="${escapeHtml(catalogLink)}"
+                           target="_blank"
+                           rel="noopener"
+                           class="uk-button uk-button-text">
+                            Visa i katalogen
+                        </a>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    /**
+     * Escape HTML to prevent XSS
+     */
+    function escapeHtml(text) {
+        if (!text) return '';
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+
+    /**
+     * Truncate text to max length
+     */
+    function truncate(text, maxLength) {
+        if (!text || text.length <= maxLength) {
+            return text;
+        }
+        return text.substring(0, maxLength) + '...';
+    }
+
+    /**
+     * Initialize when DOM is ready
+     */
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initShelves);
+    } else {
+        // DOM already loaded
+        initShelves();
+    }
+
+    // Re-initialize when new content is added (for AJAX-loaded content)
+    if (window.MutationObserver) {
+        const observer = new MutationObserver(function(mutations) {
+            mutations.forEach(function(mutation) {
+                if (mutation.addedNodes.length > 0) {
+                    // Check if any added nodes contain .koha-shelf
+                    mutation.addedNodes.forEach(function(node) {
+                        if (node.nodeType === 1) { // Element node
+                            if (node.classList && node.classList.contains('koha-shelf')) {
+                                initShelves();
+                            } else if (node.querySelectorAll) {
+                                const shelves = node.querySelectorAll('.koha-shelf');
+                                if (shelves.length > 0) {
+                                    initShelves();
+                                }
+                            }
+                        }
+                    });
+                }
+            });
+        });
+
+        observer.observe(document.body, {
+            childList: true,
+            subtree: true
+        });
+    }
+
+    // Expose initialization function globally for manual initialization
+    window.KohaShelf = {
+        init: initShelves,
+        version: '1.0.0'
+    };
+
+})();
