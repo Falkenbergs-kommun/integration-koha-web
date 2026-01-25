@@ -174,8 +174,8 @@
             books = shuffleArray(books).slice(0, maxBooks);
         }
 
-        // Books grid
-        let html = `<div class="uk-grid-match uk-child-width-1-${columns}@m uk-child-width-1-2@s" uk-grid>`;
+        // Books grid with height matching for equal card heights
+        let html = `<div class="uk-child-width-1-${columns}@m uk-child-width-1-2@s" uk-grid uk-height-match="target: > div > a > .uk-card">`;
 
         books.forEach(function(book) {
             html += renderBookCard(book, cardSize);
@@ -213,17 +213,17 @@
         }
 
         return `
-            <div>
-                <a href="${escapeHtml(catalogLink)}" target="_blank" rel="noopener" class="uk-link-reset" style="display: block; text-decoration: none; color: inherit;">
-                    <div class="uk-card uk-card-default uk-card-hover${cardSizeClass}" style="cursor: pointer;">
-                        <div class="uk-card-media-top" style="height: 400px; overflow: hidden; display: flex; align-items: center; justify-content: center; background: #f5f5f5;">
+            <div style="height: 100%;">
+                <a href="${escapeHtml(catalogLink)}" target="_blank" rel="noopener" class="uk-link-reset" style="display: flex; height: 100%; text-decoration: none; color: inherit;">
+                    <div class="uk-card uk-card-default uk-card-hover${cardSizeClass}" style="cursor: pointer; width: 100%; display: flex; flex-direction: column;">
+                        <div class="uk-card-media-top" style="height: 400px; overflow: hidden; display: flex; align-items: center; justify-content: center; background: #f5f5f5; flex-shrink: 0;">
                             <img src="${escapeHtml(imageUrl)}"
                                  alt="${escapeHtml(title)}"
                                  onerror="this.src='${CONFIG.placeholderImage}'"
                                  loading="lazy"
                                  style="width: 100%; height: 100%; object-fit: cover; object-position: center;">
                         </div>
-                        <div class="uk-card-body">
+                        <div class="uk-card-body" style="flex-grow: 1;">
                             <h3 class="uk-card-title uk-margin-remove-bottom">
                                 ${escapeHtml(title)}
                             </h3>
