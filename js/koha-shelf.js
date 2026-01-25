@@ -12,8 +12,9 @@
  * - data-api-url: Optional. Base URL for API (default: auto-detect)
  * - data-columns: Optional. Number of columns (2,3,4,5,6). Default: 3
  * - data-card-size: Optional. Card size (small, default, large). Default: default
+ * - data-max-books: Optional. Max number of books to display (randomly selected if more available)
  *
- * @version 1.0.0
+ * @version 1.1.0
  * @license MIT
  */
 
@@ -125,17 +126,30 @@
     }
 
     /**
+     * Shuffle array (Fisher-Yates algorithm)
+     */
+    function shuffleArray(array) {
+        const shuffled = array.slice(); // Create a copy
+        for (let i = shuffled.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+        }
+        return shuffled;
+    }
+
+    /**
      * Render shelf with books
      */
     function renderShelf(container, data) {
         const columns = parseInt(container.getAttribute('data-columns')) || CONFIG.defaultColumns;
         const cardSize = container.getAttribute('data-card-size') || CONFIG.defaultCardSize;
+        const maxBooks = parseInt(container.getAttribute('data-max-books')) || null;
 
         // Start building HTML
         let html = '';
 
         // Get books array - support both 'items' (shelf.php) and 'books' format
-        const books = data.items || data.books || [];
+        let books = data.items || data.books || [];
 
         // Shelf header (optional) - try both shelf_name and channel.title
         const shelfName = data.shelf_name || (data.channel && data.channel.title);
@@ -158,6 +172,11 @@
             `;
             container.innerHTML = html;
             return;
+        }
+
+        // Limit and randomize books if max-books is set
+        if (maxBooks && books.length > maxBooks) {
+            books = shuffleArray(books).slice(0, maxBooks);
         }
 
         // Books grid
@@ -201,13 +220,13 @@
         return `
             <div>
                 <div class="uk-card uk-card-default uk-card-hover${cardSizeClass}">
-                    <div class="uk-card-media-top">
-                        <a href="${escapeHtml(catalogLink)}" target="_blank" rel="noopener">
+                    <div class="uk-card-media-top" style="height: 400px; overflow: hidden; display: flex; align-items: center; justify-content: center; background: #f5f5f5;">
+                        <a href="${escapeHtml(catalogLink)}" target="_blank" rel="noopener" style="width: 100%; height: 100%; display: block;">
                             <img src="${escapeHtml(imageUrl)}"
                                  alt="${escapeHtml(title)}"
                                  onerror="this.src='${CONFIG.placeholderImage}'"
                                  loading="lazy"
-                                 class="uk-width-1-1">
+                                 style="width: 100%; height: 100%; object-fit: cover; object-position: center;">
                         </a>
                     </div>
                     <div class="uk-card-body">

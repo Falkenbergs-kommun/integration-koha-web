@@ -75,6 +75,7 @@ Byt ut `"1"` mot ditt shelf-id.
 | `data-shelf-id` | number | - | **Obligatoriskt.** ID för bokhyllan från Koha |
 | `data-columns` | number | 3 | Antal kolumner (2, 3, 4, 5, eller 6) |
 | `data-card-size` | string | default | Kortstorlek: `small`, `default`, `large` |
+| `data-max-books` | number | - | Max antal böcker att visa (slumpar om fler finns) |
 | `data-api-url` | string | auto | API bas-URL (auto-detekteras normalt) |
 
 ### Exempel med olika kolumnantal
@@ -116,6 +117,23 @@ Byt ut `"1"` mot ditt shelf-id.
 <div class="koha-shelf" data-shelf-id="1" data-card-size="large"></div>
 ```
 
+### Exempel med begränsat antal böcker
+
+**Visa max 5 slumpmässigt valda böcker:**
+```html
+<div class="koha-shelf" data-shelf-id="1" data-max-books="5"></div>
+```
+
+**Visa 8 böcker i 4 kolumner:**
+```html
+<div class="koha-shelf" data-shelf-id="1" data-columns="4" data-max-books="8"></div>
+```
+
+Om API:et returnerar fler böcker än `data-max-books` kommer widgeten att slumpmässigt välja ut det angivna antalet böcker att visa. Detta är användbart för att:
+- Skapa dynamisk variation på sidan (olika böcker vid varje sidladdning)
+- Begränsa antal böcker när bokhyllan är stor
+- Skapa "tips"-sektioner med roterande innehåll
+
 ## Responsivitet
 
 Widgeten är helt responsiv och anpassar sig automatiskt:
@@ -135,11 +153,17 @@ Widgeten visar automatiskt:
 ## Vad visas på varje kort?
 
 Varje bokkort innehåller:
-- ✅ Bokomslag (med fallback om saknas)
+- ✅ Bokomslag (enhetlig höjd 400px, anpassad för portrait-format, med fallback om saknas)
 - ✅ Titel (klickbar länk)
 - ✅ Författare
 - ✅ Beskrivning/abstract (trunkerad till 150 tecken)
 - ✅ "Visa i katalogen"-knapp (öppnas i ny flik)
+
+**Bildhantering:**
+- Alla bokomslag visas med samma höjd (400px) för enhetligt utseende
+- Bilder använder `object-fit: cover` för att fylla utrymmet utan att förvrängas
+- Optimerad för portrait-format (standard bokformat 2:3)
+- Texten börjar alltid på samma nivå oavsett bildens ursprungliga storlek
 
 ## API-integration
 

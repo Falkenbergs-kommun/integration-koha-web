@@ -193,7 +193,9 @@ För att enkelt visa bokhyllor på din webbplats finns en färdig JavaScript-wid
 - ✅ **Asynkron laddning** - Blockerar inte sidladdning
 - ✅ **Responsiv design** - Anpassar sig automatiskt till skärmstorlek
 - ✅ **UIkit 3 cards** - Snygga bokkort med hover-effekter
-- ✅ **Anpassningsbart** - Välj antal kolumner och kortstorlek
+- ✅ **Enhetlig bildhöjd** - Alla omslag visas med samma höjd (400px) för konsekvent layout
+- ✅ **Anpassningsbart** - Välj antal kolumner, kortstorlek och max antal böcker
+- ✅ **Slumpmässigt urval** - Visa ett begränsat antal slumpmässigt valda böcker
 - ✅ **Laddningsindikator** - UIkit spinner under laddning
 - ✅ **Lazy loading** - Bilder laddas endast när synliga
 - ✅ **Felhantering** - Snygga felmeddelanden vid problem
@@ -204,7 +206,8 @@ För att enkelt visa bokhyllor på din webbplats finns en färdig JavaScript-wid
 <div class="koha-shelf"
      data-shelf-id="1"
      data-columns="3"
-     data-card-size="default"></div>
+     data-card-size="default"
+     data-max-books="10"></div>
 ```
 
 | Attribut | Värden | Standard | Beskrivning |
@@ -212,6 +215,7 @@ För att enkelt visa bokhyllor på din webbplats finns en färdig JavaScript-wid
 | `data-shelf-id` | number | - | **Obligatoriskt.** Shelf-ID från Koha |
 | `data-columns` | 2-6 | 3 | Antal kolumner på desktop |
 | `data-card-size` | small, default, large | default | Storlek på korten |
+| `data-max-books` | number | - | Max antal böcker (slumpar om fler finns) |
 | `data-api-url` | url | auto | API bas-URL (auto-detekteras) |
 
 ### Exempel
@@ -229,6 +233,11 @@ För att enkelt visa bokhyllor på din webbplats finns en färdig JavaScript-wid
 **2 kolumner, stora kort:**
 ```html
 <div class="koha-shelf" data-shelf-id="1" data-columns="2" data-card-size="large"></div>
+```
+
+**Max 6 slumpmässigt valda böcker:**
+```html
+<div class="koha-shelf" data-shelf-id="1" data-max-books="6"></div>
 ```
 
 ### Dokumentation
