@@ -8,6 +8,7 @@ JavaScript-widget för att visa Koha-bokhyllor som UIkit 3 cards i Yootheme Pro 
 - ✅ Snygg laddningsindikator med UIkit spinner
 - ✅ Responsiv grid-layout (2-6 kolumner)
 - ✅ Anpassningsbara kortstorlekar
+- ✅ Filtrering på item-typer (t.ex. BARNBOK, BARNDVD)
 - ✅ Automatisk API-URL detektering
 - ✅ Lazy loading av bilder
 - ✅ Fallback för saknade bilder
@@ -63,6 +64,11 @@ Byt ut `"1"` mot ditt shelf-id.
 <div class="koha-shelf" data-source="latest"></div>
 ```
 
+**Visa endast senaste barnböcker:**
+```html
+<div class="koha-shelf" data-source="latest" data-item-types="BARNBOK"></div>
+```
+
 ### Med anpassningar
 
 ```html
@@ -80,6 +86,7 @@ Byt ut `"1"` mot ditt shelf-id.
 |----------|-----|----------|-------------|
 | `data-source` | string | shelf | Källa: `shelf` (bokhylla) eller `latest` (senaste inköp) |
 | `data-shelf-id` | number | - | **Obligatoriskt för shelf.** ID för bokhyllan från Koha |
+| `data-item-types` | string | - | Filtrera senaste böcker på item-typer (kommaseparerat, t.ex. "BARNBOK,BARNDVD") |
 | `data-columns` | number | 3 | Antal kolumner (2, 3, 4, 5, eller 6) |
 | `data-card-size` | string | default | Kortstorlek: `small`, `default`, `large` |
 | `data-max-books` | number | - | Max antal böcker att visa (slumpar om fler finns) |
@@ -122,6 +129,16 @@ Byt ut `"1"` mot ditt shelf-id.
 **Visa 12 senaste inköpen i 4 kolumner:**
 ```html
 <div class="koha-shelf" data-source="latest" data-columns="4" data-max-books="12"></div>
+```
+
+**Visa senaste barnböcker i 3 kolumner:**
+```html
+<div class="koha-shelf" data-source="latest" data-item-types="BARNBOK" data-columns="3"></div>
+```
+
+**Visa 8 senaste barn-DVDs och barnböcker i 4 kolumner:**
+```html
+<div class="koha-shelf" data-source="latest" data-item-types="BARNDVD,BARNBOK" data-columns="4" data-max-books="8"></div>
 ```
 
 ### Exempel med olika kortstorlekar
