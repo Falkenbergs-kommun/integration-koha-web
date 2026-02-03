@@ -369,7 +369,10 @@ function getItemTypesFromApi($apiBaseUrl, $apiToken) {
     $ch = curl_init();
 
     // Bygg URL - API-endpoint för item_types
-    $url = rtrim($apiBaseUrl, '/') . '/item_types';
+    // API_BASE_URL pekar till /biblios/, men item_types är på /api/v1/ nivå
+    // Extrahera base URL genom att ta bort /biblios/ delen
+    $baseApiUrl = preg_replace('#/biblios/?$#', '', $apiBaseUrl);
+    $url = rtrim($baseApiUrl, '/') . '/item_types';
 
     curl_setopt($ch, CURLOPT_URL, $url);
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
