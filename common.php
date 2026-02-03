@@ -429,4 +429,97 @@ function getItemTypesFromApi($apiBaseUrl, $apiToken) {
         'data' => $itemTypes
     ];
 }
+
+/**
+ * Hämta biblios via items-endpoint med filtrering på item_type_id
+ * Returnerar unika biblios sorterade efter biblio_id (fallande)
+ *
+ * @param string $apiBaseUrl Base URL för API (pekar till /biblios/)
+ * @param string $apiToken OAuth bearer token
+ * @param array $itemTypes Lista med item_type_id att filtrera på (OR-logik)
+ * @param int $limit Max antal biblios att returnera
+ * @return array Lista med biblio-objekt i samma format som GET /biblios
+ */
+function getFilteredBibliosFromItems($apiBaseUrl, $apiToken, $itemTypes = [], $limit = 10) {
+    // Bygg URL - API-endpoint för items
+    // API_BASE_URL pekar till /biblios/, men items är på samma nivå
+    $baseApiUrl = preg_replace('#/biblios/?$#', '', $apiBaseUrl);
+    $itemsUrl = rtrim($baseApiUrl, '/') . '/items';
+
+    // Bygg query parameters
+    // Hämta fler items än limit för att kompensera för deduplikering
+    // (flera items kan tillhöra samma biblio)
+    $perPage = $limit * 5;  // Hämta 5x limit för att säkerställa tillräckligt med unika biblios
+    $orderBy = '-item_id';   // Senaste items först
+
+    // Bygg query string med Koha API q-parameter format
+    // Koha använder q-parameter för filtrering: ?q={"item_type_id":["BOK","DVD"]}
+    $queryParts = [];
+    $queryParts[] = '_per_page=' . urlencode($perPage);
+    $queryParts[] = '_order_by=' . urlencode($orderBy);
+
+    // Bygg JSON query för item_type_id filter (OR-logik via array)
+    if (!empty($itemTypes)) {
+        // Skapa JSON query: {"item_type_id": ["BOK", "DVD"]}
+        $qFilter = json_encode(['item_type_id' => $itemTypes]);
+        $queryParts[] = 'q=' . urlencode($qFilter);
+    }
+
+    // Bygg URL med query string
+    $url = $itemsUrl . '?' . implode('&', $queryParts);
+
+    // Gör API-anrop med x-koha-embed header för att inkludera biblio-data
+    $ch = curl_init();
+    curl_setopt($ch, CURLOPT_URL, $url);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+    curl_setopt($ch, CURLOPT_HTTPHEADER, [
+        'Accept: application/json',
+        'Authorization: Bearer ' . $apiToken,
+        'x-koha-embed: biblio'  // Kritisk: bädda in biblio-data i item-responsen
+    ]);
+    curl_setopt($ch, CURLOPT_TIMEOUT, 30);
+
+    $response = curl_exec($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $error = curl_error($ch);
+    curl_close($ch);
+
+    // Felhantering - returnera tom array vid fel
+    if ($httpCode !== 200 || !$response) {
+        return [];
+    }
+
+    // Parsa JSON-respons
+    $items = json_decode($response, true);
+    if (!is_array($items)) {
+        return [];
+    }
+
+    // Extrahera och dedupliera biblios
+    // Använd biblio_id som nyckel för att automatiskt dedupliera
+    $bibliosMap = [];
+    foreach ($items as $item) {
+        // Extrahera inbäddad biblio-data
+        $biblio = $item['biblio'] ?? null;
+        if (!$biblio || !isset($biblio['biblio_id'])) {
+            continue;
+        }
+
+        $biblioId = $biblio['biblio_id'];
+        // Behåll bara första förekomsten av varje biblio (högsta item_id pga sortering)
+        if (!isset($bibliosMap[$biblioId])) {
+            $bibliosMap[$biblioId] = $biblio;
+        }
+    }
+
+    // Konvertera till array och sortera efter biblio_id fallande (senaste först)
+    $biblios = array_values($bibliosMap);
+    usort($biblios, function($a, $b) {
+        return $b['biblio_id'] - $a['biblio_id'];
+    });
+
+    // Begränsa till requested limit efter deduplikering
+    return array_slice($biblios, 0, $limit);
+}
 ?>

@@ -9,6 +9,16 @@ loadEnv(__DIR__ . '/.env');
 $format = isset($_GET['format']) ? strtolower($_GET['format']) : 'json';
 $limit = isset($_GET['limit']) ? min(intval($_GET['limit']), 50) : 10;
 
+// Hämta och validera item_type_id filter (kommaseparerad lista)
+$itemTypeIds = [];
+if (isset($_GET['item_type_id']) && !empty(trim($_GET['item_type_id']))) {
+    $itemTypeIds = array_filter(
+        array_map('trim', array_map('strtoupper', explode(',', $_GET['item_type_id']))),
+        function($id) { return !empty($id); }
+    );
+    sort($itemTypeIds); // Normalisera ordning för konsistenta cache-nycklar
+}
+
 // Validera format
 if (!in_array($format, ['json', 'xml'])) {
     $format = 'json';
@@ -23,9 +33,16 @@ if ($format === 'xml') {
 header('Access-Control-Allow-Origin: *');
 header('Cache-Control: no-cache, must-revalidate');
 
-// Cache-fil baserat på format och antal
-$cacheFile = __DIR__ . "/cache/cache_latest_{$limit}_{$format}.cache";
+// Cache-fil baserat på format, antal och item_type_id filter
+$itemTypeSuffix = empty($itemTypeIds) ? '' : '_' . implode('_', $itemTypeIds);
+$cacheFile = __DIR__ . "/cache/cache_latest_{$limit}_{$format}{$itemTypeSuffix}.cache";
 $cacheMaxAge = intval(getenv('CACHE_TTL_LATEST') ?: 3600); // Standard 1 timme
+
+// Säkerställ att cache-katalogen finns
+$cacheDir = __DIR__ . '/cache';
+if (!is_dir($cacheDir)) {
+    mkdir($cacheDir, 0755, true);
+}
 
 // Kolla om cache finns och är giltig
 if (file_exists($cacheFile) && (time() - filemtime($cacheFile)) < $cacheMaxAge) {
@@ -49,39 +66,45 @@ if (!$apiToken) {
     exit;
 }
 
-// Hämta senaste böckerna direkt från API
-// Använd sortering på biblio_id i fallande ordning för att få senast tillagda
-$bibliosUrl = rtrim($apiBaseUrl, '/') . '?_order_by=-biblio_id&_per_page=' . $limit;
+// Hämta biblios - olika strategi beroende på om filtrering används
+if (empty($itemTypeIds)) {
+    // Ingen filtrering - använd direkt biblios endpoint (snabbast)
+    $bibliosUrl = rtrim($apiBaseUrl, '/') . '?_order_by=-biblio_id&_per_page=' . $limit;
 
-$ch = curl_init();
-curl_setopt($ch, CURLOPT_URL, $bibliosUrl);
-curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
-curl_setopt($ch, CURLOPT_HTTPHEADER, [
-    'Accept: application/json',
-    'Authorization: Bearer ' . $apiToken
-]);
-curl_setopt($ch, CURLOPT_TIMEOUT, 30);
+    $ch = curl_init();
+    curl_setopt($ch, CURLOPT_URL, $bibliosUrl);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+    curl_setopt($ch, CURLOPT_HTTPHEADER, [
+        'Accept: application/json',
+        'Authorization: Bearer ' . $apiToken
+    ]);
+    curl_setopt($ch, CURLOPT_TIMEOUT, 30);
 
-$response = curl_exec($ch);
-$httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-$error = curl_error($ch);
-curl_close($ch);
+    $response = curl_exec($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $error = curl_error($ch);
+    curl_close($ch);
 
-if ($httpCode !== 200 || !$response) {
-    http_response_code(500);
-    $errorMsg = [
-        'status' => 'error',
-        'message' => 'Kunde inte hämta senaste böckerna från API',
-        'http_code' => $httpCode,
-        'error' => $error
-    ];
-    echo $format === 'xml' ? generateErrorXml($errorMsg) : json_encode($errorMsg);
-    exit;
+    if ($httpCode !== 200 || !$response) {
+        http_response_code(500);
+        $errorMsg = [
+            'status' => 'error',
+            'message' => 'Kunde inte hämta senaste böckerna från API',
+            'http_code' => $httpCode,
+            'error' => $error
+        ];
+        echo $format === 'xml' ? generateErrorXml($errorMsg) : json_encode($errorMsg);
+        exit;
+    }
+
+    $biblios = json_decode($response, true);
+} else {
+    // Filtrering på item_type_id - använd items endpoint med biblio embed
+    $biblios = getFilteredBibliosFromItems($apiBaseUrl, $apiToken, $itemTypeIds, $limit);
 }
 
-$biblios = json_decode($response, true);
-
+// Validera resultat
 if (!is_array($biblios)) {
     http_response_code(500);
     $errorMsg = ['status' => 'error', 'message' => 'Ogiltigt svar från API'];
