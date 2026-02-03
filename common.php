@@ -496,9 +496,11 @@ function getFilteredBibliosFromItems($apiBaseUrl, $apiToken, $itemTypes = [], $l
         return [];
     }
 
-    // Extrahera och dedupliera biblios
+    // Extrahera och dedupliera biblios samt samla item_types
     // Använd biblio_id som nyckel för att automatiskt dedupliera
     $bibliosMap = [];
+    $itemTypesMap = []; // Samla alla item_type_id per biblio
+
     foreach ($items as $item) {
         // Extrahera inbäddad biblio-data
         $biblio = $item['biblio'] ?? null;
@@ -507,14 +509,29 @@ function getFilteredBibliosFromItems($apiBaseUrl, $apiToken, $itemTypes = [], $l
         }
 
         $biblioId = $biblio['biblio_id'];
+
         // Behåll bara första förekomsten av varje biblio (högsta item_id pga sortering)
         if (!isset($bibliosMap[$biblioId])) {
             $bibliosMap[$biblioId] = $biblio;
+            $itemTypesMap[$biblioId] = [];
+        }
+
+        // Samla item_type_id för denna biblio (dedupliera även item types)
+        $itemTypeId = $item['item_type_id'] ?? null;
+        if ($itemTypeId && !in_array($itemTypeId, $itemTypesMap[$biblioId])) {
+            $itemTypesMap[$biblioId][] = $itemTypeId;
         }
     }
 
-    // Konvertera till array och sortera efter biblio_id fallande (senaste först)
-    $biblios = array_values($bibliosMap);
+    // Konvertera till array, lägg till item_types, och sortera efter biblio_id fallande
+    $biblios = [];
+    foreach ($bibliosMap as $biblioId => $biblio) {
+        // Lägg till item_types array till varje biblio
+        $biblio['item_types'] = $itemTypesMap[$biblioId] ?? [];
+        $biblios[] = $biblio;
+    }
+
+    // Sortera efter biblio_id fallande (senaste först)
     usort($biblios, function($a, $b) {
         return $b['biblio_id'] - $a['biblio_id'];
     });

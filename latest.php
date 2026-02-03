@@ -195,7 +195,8 @@ function processLatestBooks($biblios, $apiBaseUrl, $apiToken, $baseUrl) {
             'notes' => $biblio['notes'] ?? null,
             'image_url' => $imageUrl,
             'image_cached' => $cachedImagePath,
-            'image_cached_url' => $cachedImageFullUrl
+            'image_cached_url' => $cachedImageFullUrl,
+            'item_types' => $biblio['item_types'] ?? null
         ];
     }
 
