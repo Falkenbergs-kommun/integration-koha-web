@@ -7,16 +7,18 @@
  * Usage:
  * <div class="koha-shelf" data-shelf-id="123"></div>
  * <div class="koha-shelf" data-source="latest"></div>
+ * <div class="koha-shelf" data-source="latest" data-item-types="BARNBOK,BARNDVD"></div>
  *
  * Options (data attributes):
  * - data-shelf-id: Required for shelf source. The shelf ID to load
  * - data-source: Optional. Source type: "shelf" (default) or "latest"
+ * - data-item-types: Optional. Filter latest books by item types (comma-separated, e.g., "BARNBOK,BARNDVD")
  * - data-api-url: Optional. Base URL for API (default: auto-detect)
  * - data-columns: Optional. Number of columns (2,3,4,5,6). Default: 3
  * - data-card-size: Optional. Card size (small, default, large). Default: default
  * - data-max-books: Optional. Max number of books to display (randomly selected if more available)
  *
- * @version 1.2.0
+ * @version 1.3.0
  * @license MIT
  */
 
@@ -65,6 +67,14 @@
         let url;
         if (source === 'latest') {
             url = `${apiUrl}/latest.php`;
+
+            // Add item-types filter if specified
+            const itemTypes = container.getAttribute('data-item-types');
+            if (itemTypes) {
+                const params = new URLSearchParams();
+                params.append('item_type_id', itemTypes);
+                url += '?' + params.toString();
+            }
         } else {
             url = `${apiUrl}/shelf.php?shelfnumber=${encodeURIComponent(shelfId)}`;
         }
@@ -297,7 +307,7 @@
     // Expose initialization function globally for manual initialization
     window.KohaShelf = {
         init: initShelves,
-        version: '1.0.0'
+        version: '1.3.0'
     };
 
 })();
