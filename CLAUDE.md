@@ -12,6 +12,7 @@ This is a PHP-based RSS-to-JSON converter for Falkenbergs bibliotek (Falkenberg 
 
 - **index.php**: Single-list endpoint (hardcoded to list 247) - fetches RSS, enriches with API data, caches result
 - **list.php**: Dynamic multi-list endpoint - accepts `?id=XXX` parameter to fetch any library list
+- **item-types.php**: Item types listing endpoint - fetches all available item types from Koha API with no caching
 - **common.php**: Shared utilities library containing all reusable functions
 - **debug.php**: Development tool for inspecting raw RSS feed responses and debugging XML parsing issues
 
@@ -32,6 +33,7 @@ This is a PHP-based RSS-to-JSON converter for Falkenbergs bibliotek (Falkenberg 
 - `loadEnv($filePath)` - Simple .env parser without external dependencies
 - `getOAuthToken($oauthUrl, $clientId, $clientSecret)` - OAuth 2.0 client credentials flow
 - `getBookDataFromApi($biblioId, $apiBaseUrl, $apiToken)` - Fetch 20+ metadata fields per book
+- `getItemTypesFromApi($apiBaseUrl, $apiToken)` - Fetch all item types with 6 metadata fields (id, description, parent, image, category, visibility)
 - `extractBiblioId($url)` - Parse biblionumber from Koha URLs using regex
 - `getFirstIsbn($isbnString)` - Extract first ISBN from pipe/comma-separated lists
 - `getImageUrl($isbn)` - Build Syndetics image URL from ISBN
