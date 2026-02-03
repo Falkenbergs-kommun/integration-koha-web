@@ -363,4 +363,67 @@ function generateXmlOutput($result) {
 
     return $dom->saveXML();
 }
+
+// Funktion för att hämta item types från API
+function getItemTypesFromApi($apiBaseUrl, $apiToken) {
+    $ch = curl_init();
+
+    // Bygg URL - API-endpoint för item_types
+    $url = rtrim($apiBaseUrl, '/') . '/item_types';
+
+    curl_setopt($ch, CURLOPT_URL, $url);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+    curl_setopt($ch, CURLOPT_HTTPHEADER, [
+        'Accept: application/json',
+        'Authorization: Bearer ' . $apiToken
+    ]);
+    curl_setopt($ch, CURLOPT_TIMEOUT, 10);
+
+    $response = curl_exec($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $error = curl_error($ch);
+    curl_close($ch);
+
+    // Returnera strukturerad respons med felhantering
+    if ($httpCode !== 200 || !$response) {
+        return [
+            'success' => false,
+            'http_code' => $httpCode,
+            'error' => $error ?: 'API returnerade inte status 200',
+            'data' => []
+        ];
+    }
+
+    // Parsa JSON-respons
+    $data = json_decode($response, true);
+    if (json_last_error() !== JSON_ERROR_NONE) {
+        return [
+            'success' => false,
+            'http_code' => $httpCode,
+            'error' => 'Kunde inte parsa JSON: ' . json_last_error_msg(),
+            'data' => []
+        ];
+    }
+
+    // Extrahera relevanta fält från varje item type
+    $itemTypes = [];
+    foreach ($data as $item) {
+        $itemTypes[] = [
+            'item_type_id' => $item['item_type_id'] ?? null,
+            'description' => $item['description'] ?? null,
+            'parent_type' => $item['parent_type'] ?? null,
+            'image_url' => $item['image_url'] ?? null,
+            'searchcategory' => $item['searchcategory'] ?? null,
+            'hide_in_opac' => $item['hide_in_opac'] ?? false
+        ];
+    }
+
+    return [
+        'success' => true,
+        'http_code' => $httpCode,
+        'error' => null,
+        'data' => $itemTypes
+    ];
+}
 ?>
