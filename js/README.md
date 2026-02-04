@@ -7,8 +7,10 @@ JavaScript-widget för att visa Koha-bokhyllor som UIkit 3 cards i Yootheme Pro 
 - ✅ Asynkron laddning (blockerar inte sidladdning)
 - ✅ Snygg laddningsindikator med UIkit spinner
 - ✅ Responsiv grid-layout (2-6 kolumner)
+- ✅ Karusell/slider-läge med touch-stöd
 - ✅ Anpassningsbara kortstorlekar
 - ✅ Filtrering på item-typer (t.ex. BARNBOK, BARNDVD)
+- ✅ Valfri visning av bokbeskrivningar (abstract)
 - ✅ Automatisk API-URL detektering
 - ✅ Lazy loading av bilder
 - ✅ Fallback för saknade bilder
@@ -69,6 +71,11 @@ Byt ut `"1"` mot ditt shelf-id.
 <div class="koha-shelf" data-source="latest" data-item-types="BARNBOK"></div>
 ```
 
+**Visa som karusell/slider:**
+```html
+<div class="koha-shelf" data-source="latest" data-display-mode="slider" data-columns="4"></div>
+```
+
 ### Med anpassningar
 
 ```html
@@ -87,7 +94,9 @@ Byt ut `"1"` mot ditt shelf-id.
 | `data-source` | string | shelf | Källa: `shelf` (bokhylla) eller `latest` (senaste inköp) |
 | `data-shelf-id` | number | - | **Obligatoriskt för shelf.** ID för bokhyllan från Koha |
 | `data-item-types` | string | - | Filtrera senaste böcker på item-typer (kommaseparerat, t.ex. "BARNBOK,BARNDVD") |
-| `data-columns` | number | 3 | Antal kolumner (2, 3, 4, 5, eller 6) |
+| `data-display-mode` | string | grid | Visningsläge: `grid` eller `slider` (karusell) |
+| `data-show-abstract` | boolean | true | Visa bokbeskrivningar. Sätt till `false` för att dölja |
+| `data-columns` | number | 3 | Antal kolumner i grid eller synliga objekt i slider (2, 3, 4, 5, eller 6) |
 | `data-card-size` | string | default | Kortstorlek: `small`, `default`, `large` |
 | `data-max-books` | number | - | Max antal böcker att visa (slumpar om fler finns) |
 | `data-api-url` | string | auto | API bas-URL (auto-detekteras normalt) |
@@ -139,6 +148,41 @@ Byt ut `"1"` mot ditt shelf-id.
 **Visa 8 senaste barn-DVDs och barnböcker i 4 kolumner:**
 ```html
 <div class="koha-shelf" data-source="latest" data-item-types="BARNDVD,BARNBOK" data-columns="4" data-max-books="8"></div>
+```
+
+### Exempel med slider/karusell
+
+**Visa böcker som en slider med 4 synliga böcker:**
+```html
+<div class="koha-shelf" data-shelf-id="1" data-display-mode="slider" data-columns="4"></div>
+```
+
+**Visa senaste barnböcker som slider med 3 synliga böcker:**
+```html
+<div class="koha-shelf" data-source="latest" data-item-types="BARNBOK" data-display-mode="slider" data-columns="3"></div>
+```
+
+**Slider med 5 synliga böcker, utan beskrivningar:**
+```html
+<div class="koha-shelf" data-source="latest" data-display-mode="slider" data-columns="5" data-show-abstract="false"></div>
+```
+
+Slider-läget:
+- Visar navigeringsknappar (pil vänster/höger) vid hover
+- Stödjer touch/swipe på mobila enheter
+- Kolumnantalet anger hur många böcker som syns samtidigt
+- Responsivt: 2 böcker på tablet, 1 på mobil (oavsett kolumninställning)
+
+### Exempel med döljda beskrivningar
+
+**Grid utan bokbeskrivningar:**
+```html
+<div class="koha-shelf" data-shelf-id="1" data-show-abstract="false"></div>
+```
+
+**Senaste böcker utan beskrivningar i 4 kolumner:**
+```html
+<div class="koha-shelf" data-source="latest" data-columns="4" data-show-abstract="false"></div>
 ```
 
 ### Exempel med olika kortstorlekar

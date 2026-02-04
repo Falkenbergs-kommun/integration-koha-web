@@ -8,17 +8,20 @@
  * <div class="koha-shelf" data-shelf-id="123"></div>
  * <div class="koha-shelf" data-source="latest"></div>
  * <div class="koha-shelf" data-source="latest" data-item-types="BARNBOK,BARNDVD"></div>
+ * <div class="koha-shelf" data-source="latest" data-display-mode="slider" data-columns="4"></div>
  *
  * Options (data attributes):
  * - data-shelf-id: Required for shelf source. The shelf ID to load
  * - data-source: Optional. Source type: "shelf" (default) or "latest"
  * - data-item-types: Optional. Filter latest books by item types (comma-separated, e.g., "BARNBOK,BARNDVD")
+ * - data-display-mode: Optional. Display mode: "grid" (default) or "slider"
+ * - data-show-abstract: Optional. Show book abstracts (true/false). Default: true
  * - data-api-url: Optional. Base URL for API (default: auto-detect)
- * - data-columns: Optional. Number of columns (2,3,4,5,6). Default: 3
+ * - data-columns: Optional. Number of columns in grid or visible items in slider (2,3,4,5,6). Default: 3
  * - data-card-size: Optional. Card size (small, default, large). Default: default
  * - data-max-books: Optional. Max number of books to display (randomly selected if more available)
  *
- * @version 1.3.0
+ * @version 1.4.0
  * @license MIT
  */
 
@@ -165,6 +168,8 @@
         const columns = parseInt(container.getAttribute('data-columns')) || CONFIG.defaultColumns;
         const cardSize = container.getAttribute('data-card-size') || CONFIG.defaultCardSize;
         const maxBooks = parseInt(container.getAttribute('data-max-books')) || null;
+        const displayMode = container.getAttribute('data-display-mode') || 'grid';
+        const showAbstract = container.getAttribute('data-show-abstract') !== 'false';
 
         // Get books array - support both 'items' (shelf.php) and 'books' format
         let books = data.items || data.books || [];
@@ -184,14 +189,35 @@
             books = shuffleArray(books).slice(0, maxBooks);
         }
 
-        // Books grid with height matching for equal card heights
-        let html = `<div class="uk-child-width-1-${columns}@m uk-child-width-1-2@s" uk-grid uk-height-match="target: > div > a > .uk-card">`;
+        let html;
 
-        books.forEach(function(book) {
-            html += renderBookCard(book, cardSize);
-        });
+        if (displayMode === 'slider') {
+            // Slider mode with navigation and height matching for equal card heights
+            html = `
+                <div class="uk-position-relative uk-visible-toggle" tabindex="-1" uk-slider>
+                    <div class="uk-slider-items uk-child-width-1-${columns}@m uk-child-width-1-2@s uk-grid" uk-height-match="target: > div > a > .uk-card">
+            `;
 
-        html += '</div>';
+            books.forEach(function(book) {
+                html += renderBookCard(book, cardSize, showAbstract);
+            });
+
+            html += `
+                    </div>
+                    <a class="uk-position-center-left uk-position-small uk-hidden-hover" href uk-slidenav-previous uk-slider-item="previous" style="background: white; border-radius: 50%; width: 50px; height: 50px; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 8px rgba(0,0,0,0.15);"></a>
+                    <a class="uk-position-center-right uk-position-small uk-hidden-hover" href uk-slidenav-next uk-slider-item="next" style="background: white; border-radius: 50%; width: 50px; height: 50px; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 8px rgba(0,0,0,0.15);"></a>
+                </div>
+            `;
+        } else {
+            // Grid mode with height matching for equal card heights
+            html = `<div class="uk-child-width-1-${columns}@m uk-child-width-1-2@s" uk-grid uk-height-match="target: > div > a > .uk-card">`;
+
+            books.forEach(function(book) {
+                html += renderBookCard(book, cardSize, showAbstract);
+            });
+
+            html += '</div>';
+        }
 
         container.innerHTML = html;
 
@@ -204,7 +230,7 @@
     /**
      * Render a single book card
      */
-    function renderBookCard(book, cardSize) {
+    function renderBookCard(book, cardSize, showAbstract) {
         const imageUrl = book.image_cached_url || book.image_url || CONFIG.placeholderImage;
         // Use api_title (cleaner) if available, fallback to title
         const title = book.api_title || book.title || 'Okänd titel';
@@ -238,7 +264,7 @@
                                 ${escapeHtml(title)}
                             </h3>
                             ${author ? `<p class="uk-text-meta uk-margin-remove-top">${escapeHtml(author)}</p>` : ''}
-                            ${abstract ? `<p class="uk-text-small uk-margin-small-top">${truncate(escapeHtml(abstract), 150)}</p>` : ''}
+                            ${showAbstract && abstract ? `<p class="uk-text-small uk-margin-small-top">${truncate(escapeHtml(abstract), 150)}</p>` : ''}
                         </div>
                     </div>
                 </a>
@@ -307,7 +333,7 @@
     // Expose initialization function globally for manual initialization
     window.KohaShelf = {
         init: initShelves,
-        version: '1.3.0'
+        version: '1.4.0'
     };
 
 })();
