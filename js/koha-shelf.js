@@ -21,7 +21,7 @@
  * - data-card-size: Optional. Card size (small, default, large). Default: default
  * - data-max-books: Optional. Max number of books to display (randomly selected if more available)
  *
- * @version 1.4.0
+ * @version 1.4.1
  * @license MIT
  */
 
@@ -32,7 +32,8 @@
     const CONFIG = {
         defaultColumns: 3,
         defaultCardSize: 'default',
-        placeholderImage: 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="200" height="300"%3E%3Crect fill="%23ddd" width="200" height="300"/%3E%3Ctext fill="%23999" font-family="sans-serif" font-size="18" dy="150" dx="50"%3EIngen bild%3C/text%3E%3C/svg%3E'
+        // Simple 1x1 transparent PNG as placeholder (base64 encoded)
+        placeholderImage: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII='
     };
 
     /**
@@ -231,7 +232,9 @@
      * Render a single book card
      */
     function renderBookCard(book, cardSize, showAbstract) {
-        const imageUrl = book.image_cached_url || book.image_url || CONFIG.placeholderImage;
+        // Only use cached images that have been verified by the server
+        // Don't link directly to Syndetics as images may not exist
+        const imageUrl = book.image_cached_url || CONFIG.placeholderImage;
         // Use api_title (cleaner) if available, fallback to title
         const title = book.api_title || book.title || 'Okänd titel';
         // Use api_author if available, fallback to author
@@ -253,9 +256,8 @@
                 <a href="${escapeHtml(catalogLink)}" target="_blank" rel="noopener" class="uk-link-reset" style="display: flex; height: 100%; text-decoration: none; color: inherit;">
                     <div class="uk-card uk-card-default uk-card-hover${cardSizeClass}" style="cursor: pointer; width: 100%; display: flex; flex-direction: column;">
                         <div class="uk-card-media-top" style="height: 400px; overflow: hidden; display: flex; align-items: center; justify-content: center; background: #f5f5f5; flex-shrink: 0;">
-                            <img src="${escapeHtml(imageUrl)}"
+                            <img src="${imageUrl}"
                                  alt="${escapeHtml(title)}"
-                                 onerror="this.src='${CONFIG.placeholderImage}'"
                                  loading="lazy"
                                  style="width: 100%; height: 100%; object-fit: cover; object-position: center;">
                         </div>
@@ -333,7 +335,7 @@
     // Expose initialization function globally for manual initialization
     window.KohaShelf = {
         init: initShelves,
-        version: '1.4.0'
+        version: '1.4.1'
     };
 
 })();
