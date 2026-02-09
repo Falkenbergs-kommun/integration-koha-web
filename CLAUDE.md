@@ -46,10 +46,21 @@ This is a PHP-based RSS-to-JSON converter for Falkenbergs bibliotek (Falkenberg 
 ## Environment Configuration
 
 Required `.env` variables:
+
+**Koha API:**
 - `API_BASE_URL` - Base URL for book metadata API (biblionumber appended)
 - `OAUTH_URL` - OAuth token endpoint URL
 - `CLIENT_ID` - OAuth client ID
 - `CLIENT_SECRET` - OAuth client secret
+
+**Directus (for enriched metadata storage):**
+- `DIRECTUS_API_URL` - Directus instance URL (e.g., https://nav.utvecklingfalkenberg.se)
+- `DIRECTUS_API_TOKEN` - Directus API token with read/write access to kft_koha_enriched collection
+
+**Google Gemini AI (for metadata enrichment):**
+- `GEMINI_API_KEY` - Google Gemini API key from https://aistudio.google.com/app/apikey
+
+See `.env.example` for template and `docs/GEMINI_ENRICHMENT.md` for detailed setup guide.
 
 ## Caching Strategy
 
@@ -96,6 +107,76 @@ The final JSON includes 20+ metadata fields per book including ISBN, title, auth
 - Content-Type validation ensures real images vs error pages
 - Failed downloads return null, not errors
 - images/ directory is auto-created with 0755 permissions
+
+## AI Enrichment & Directus Integration
+
+### Enriched Metadata Collection
+
+The project includes AI-powered enrichment of bibliographic metadata using Google Gemini API. Enriched data is stored in Directus collection `kft_koha_enriched`:
+
+**Enriched fields:**
+- `abstract_enriched` - AI-generated enhanced book descriptions (Swedish)
+- `subjects` - Structured subject categories (JSON array)
+- `tags` - Searchable tags for discovery (JSON array)
+- `target_audience` - Automatically identified audience (Gymnasiet, Allmänheten, etc.)
+- `grounding_sources` - Sources and search queries used by AI (for transparency)
+- `enrichment_cost_usd` - Cost per enrichment in USD (for tracking)
+
+### Automated Enrichment Pipeline
+
+**Python enrichment script (enrich/enrich_from_directus.py):**
+- Fetches books without abstracts from `kft_koha_biblios`
+- Enriches with Google Gemini API + Google Search grounding
+- Saves directly to `kft_koha_enriched` via Directus API
+- Tracks and saves API costs per enrichment
+- Automatically excludes already enriched books
+
+**Usage:**
+```bash
+cd enrich/
+uv run enrich_from_directus.py --limit 10        # Enrich 10 books
+uv run enrich_from_directus.py --dry-run        # Test without saving
+uv run enrich_from_directus.py --model gemini-1.5-pro  # Use Pro model
+```
+
+**Cost tracking:**
+- Typical cost: ~$0.00015 per book (0.015 öre)
+- Costs calculated from actual token usage
+- Saved to database for transparency
+- See `enrich/COST_TRACKING.md` for details
+
+### Setup & Troubleshooting
+
+**Initial setup scripts (setup/ directory):**
+- `setup-directus-collection.php` - Create collection via API
+- `import-enriched-data.php` - Import enriched data to Directus
+- `directus-create-enriched-collection.sql` - SQL DDL for manual setup
+- `fix-*.php` - Troubleshooting scripts for field types and interfaces
+- See `setup/README.md` for detailed usage
+
+**Documentation (docs/ directory):**
+- `ENRICHED_DATA_SETUP.md` - Full setup guide for Directus collection
+- `QUICK_START_ENRICHED.md` - Quick start guide with API examples
+- `GEMINI_ENRICHMENT.md` - Google Gemini API integration guide
+- `DIRECTUS_GUI_FIX_TUTORIAL.md` - Troubleshooting JSON field issues
+- `INTERFACE_EXPLAINED.md` - Understanding Directus interface types
+
+**Directus API endpoints:**
+```bash
+# Get enriched data for a biblio
+GET /items/kft_koha_enriched?filter[biblio_id][_eq]=71069
+
+# Search in enriched abstracts
+GET /items/kft_koha_enriched?search=demokrati
+
+# Filter by target audience
+GET /items/kft_koha_enriched?filter[target_audience][_eq]=Gymnasiet
+
+# Get total enrichment costs
+GET /items/kft_koha_enriched?aggregate[sum]=enrichment_cost_usd
+```
+
+The enriched data can be integrated into existing endpoints (index.php, list.php, latest.php) by fetching from Directus API and merging with Koha metadata.
 
 ## Code Style Conventions
 - Swedish comments and variable names (bibliotek domain language)

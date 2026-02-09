@@ -1,0 +1,230 @@
+{
+  "collection": "kft_koha_enriched",
+  "meta": {
+    "collection": "kft_koha_enriched",
+    "icon": "auto_awesome",
+    "note": "AI-enriched metadata for library biblios with enhanced abstracts, subjects, tags and grounding sources",
+    "display_template": "{{biblio_id}} - {{title}}",
+    "hidden": false,
+    "singleton": false,
+    "translations": [
+      {
+        "language": "sv-SE",
+        "translation": "Koha Enriched Biblios",
+        "singular": "Enriched Biblio",
+        "plural": "Enriched Biblios"
+      }
+    ],
+    "archive_field": null,
+    "archive_app_filter": true,
+    "archive_value": null,
+    "unarchive_value": null,
+    "sort_field": "biblio_id"
+  },
+  "schema": {
+    "name": "kft_koha_enriched",
+    "comment": "AI-enriched bibliographic metadata"
+  },
+  "fields": [
+    {
+      "field": "id",
+      "type": "integer",
+      "meta": {
+        "interface": "input",
+        "readonly": true,
+        "hidden": true,
+        "width": "half"
+      },
+      "schema": {
+        "name": "id",
+        "is_primary_key": true,
+        "has_auto_increment": true,
+        "is_nullable": false
+      }
+    },
+    {
+      "field": "biblio_id",
+      "type": "integer",
+      "meta": {
+        "interface": "input",
+        "required": true,
+        "note": "Foreign key to kft_koha_biblios.biblio_id",
+        "width": "half",
+        "display": "related-values",
+        "display_options": {
+          "template": "{{biblio_id}} - {{title}}"
+        }
+      },
+      "schema": {
+        "name": "biblio_id",
+        "is_nullable": false,
+        "is_unique": true,
+        "foreign_key_table": "kft_koha_biblios",
+        "foreign_key_column": "biblio_id"
+      }
+    },
+    {
+      "field": "isbn_clean",
+      "type": "string",
+      "meta": {
+        "interface": "input",
+        "width": "half",
+        "note": "Cleaned ISBN without dashes"
+      },
+      "schema": {
+        "name": "isbn_clean",
+        "max_length": 20,
+        "is_nullable": true
+      }
+    },
+    {
+      "field": "title",
+      "type": "string",
+      "meta": {
+        "interface": "input",
+        "width": "full",
+        "note": "Book title (denormalized for quick access)"
+      },
+      "schema": {
+        "name": "title",
+        "max_length": 500,
+        "is_nullable": true
+      }
+    },
+    {
+      "field": "abstract_enriched",
+      "type": "text",
+      "meta": {
+        "interface": "input-rich-text-md",
+        "width": "full",
+        "note": "AI-generated enhanced abstract with detailed description"
+      },
+      "schema": {
+        "name": "abstract_enriched",
+        "is_nullable": true
+      }
+    },
+    {
+      "field": "subjects",
+      "type": "json",
+      "meta": {
+        "interface": "list",
+        "width": "half",
+        "note": "Array of subject categories",
+        "options": {
+          "template": "{{value}}",
+          "addLabel": "Add Subject"
+        }
+      },
+      "schema": {
+        "name": "subjects",
+        "is_nullable": true
+      }
+    },
+    {
+      "field": "tags",
+      "type": "json",
+      "meta": {
+        "interface": "tags",
+        "width": "half",
+        "note": "Array of searchable tags",
+        "options": {
+          "lowercase": true,
+          "alphabetize": true
+        }
+      },
+      "schema": {
+        "name": "tags",
+        "is_nullable": true
+      }
+    },
+    {
+      "field": "target_audience",
+      "type": "string",
+      "meta": {
+        "interface": "select-dropdown",
+        "width": "half",
+        "note": "Intended audience/reading level",
+        "options": {
+          "choices": [
+            {"text": "Allmänheten", "value": "Allmänheten"},
+            {"text": "Gymnasiet", "value": "Gymnasiet"},
+            {"text": "Högskola", "value": "Högskola"},
+            {"text": "Barn", "value": "Barn"},
+            {"text": "Vuxna", "value": "Vuxna"}
+          ],
+          "allowOther": true
+        }
+      },
+      "schema": {
+        "name": "target_audience",
+        "max_length": 255,
+        "is_nullable": true
+      }
+    },
+    {
+      "field": "grounding_search_queries",
+      "type": "json",
+      "meta": {
+        "interface": "list",
+        "width": "half",
+        "note": "Search queries used by AI for grounding",
+        "options": {
+          "template": "{{value}}"
+        }
+      },
+      "schema": {
+        "name": "grounding_search_queries",
+        "is_nullable": true
+      }
+    },
+    {
+      "field": "grounding_sources",
+      "type": "json",
+      "meta": {
+        "interface": "list",
+        "width": "full",
+        "note": "Sources used by AI with URIs and titles",
+        "options": {
+          "template": "{{title}}: {{uri}}"
+        }
+      },
+      "schema": {
+        "name": "grounding_sources",
+        "is_nullable": true
+      }
+    },
+    {
+      "field": "date_created",
+      "type": "timestamp",
+      "meta": {
+        "interface": "datetime",
+        "readonly": true,
+        "hidden": true,
+        "special": ["date-created"],
+        "width": "half"
+      },
+      "schema": {
+        "name": "date_created",
+        "is_nullable": false,
+        "default_value": "CURRENT_TIMESTAMP"
+      }
+    },
+    {
+      "field": "date_updated",
+      "type": "timestamp",
+      "meta": {
+        "interface": "datetime",
+        "readonly": true,
+        "hidden": true,
+        "special": ["date-updated"],
+        "width": "half"
+      },
+      "schema": {
+        "name": "date_updated",
+        "is_nullable": true,
+        "default_value": "CURRENT_TIMESTAMP"
+      }
+    }
+  ]
+}

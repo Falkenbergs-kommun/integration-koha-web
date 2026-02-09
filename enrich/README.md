@@ -1,0 +1,234 @@
+# Book Enrichment Scripts
+
+Automatisk berikning av bibliografisk metadata med Google Gemini AI.
+
+## Scripts
+
+### 1. `enrich_from_directus.py` (NY! Rekommenderad)
+
+Hämtar böcker från Directus, berikar med Gemini AI, och sparar direkt tillbaka till Directus.
+
+**Funktioner:**
+- ✅ Hämtar böcker från `kft_koha_biblios` som saknar abstract
+- ✅ Filtrerar bort böcker som redan finns i `kft_koha_enriched`
+- ✅ Berikar med Google Gemini API + Google Search grounding
+- ✅ Sparar direkt till `kft_koha_enriched` via Directus API
+- ✅ Rate limiting för att undvika API-begränsningar
+
+**Usage:**
+```bash
+# Berika 10 böcker (default)
+uv run enrich_from_directus.py
+
+# Berika 25 böcker
+uv run enrich_from_directus.py --limit 25
+
+# Dry-run (visa vad som skulle göras utan att spara)
+uv run enrich_from_directus.py --dry-run
+
+# Använd annan modell
+uv run enrich_from_directus.py --model gemini-1.5-pro
+
+# Längre delay mellan anrop (för att vara snäll mot API)
+uv run enrich_from_directus.py --delay 2.0
+```
+
+**Kräver i `.env`:**
+```env
+GEMINI_API_KEY=your-gemini-api-key
+DIRECTUS_API_URL=https://nav.utvecklingfalkenberg.se
+DIRECTUS_API_TOKEN=your-directus-token
+```
+
+### 2. `abstract_enrichment.py` (Original)
+
+Läser från fil, berikar, och sparar till fil. Bra för batch-processing av exporterad data.
+
+**Usage:**
+```bash
+# Läs från books.json, spara till enriched_books.json
+uv run abstract_enrichment.py --input books.json --output enriched_books.json
+
+# Använd annan modell
+uv run abstract_enrichment.py --model gemini-1.5-pro
+
+# Custom delay
+uv run abstract_enrichment.py --delay 2.0
+```
+
+## Installation
+
+### Förutsättningar
+
+- Python 3.11+
+- `uv` (Python package installer)
+
+### Setup
+
+```bash
+# Installera dependencies med uv
+cd enrich/
+uv pip install -e .
+
+# Eller manuellt:
+uv pip install google-genai pydantic python-dotenv requests
+```
+
+### Hämta Gemini API-nyckel
+
+1. Gå till https://aistudio.google.com/app/apikey
+2. Logga in med Google-konto
+3. Klicka "Create API key"
+4. Kopiera nyckeln
+5. Lägg till i `.env`:
+   ```env
+   GEMINI_API_KEY=your-api-key-here
+   ```
+
+## Workflow
+
+### Rekommenderad Process (Automatisk)
+
+```bash
+# 1. Berika 10 nya böcker
+uv run enrich_from_directus.py --limit 10
+
+# 2. Verifiera i Directus GUI
+#    https://nav.utvecklingfalkenberg.se/admin
+#    Content → kft_koha_enriched
+
+# 3. Kör igen för fler böcker
+uv run enrich_from_directus.py --limit 25
+```
+
+### Manual Process (Fil-baserad)
+
+```bash
+# 1. Exportera böcker från Directus
+curl -G 'https://nav.utvecklingfalkenberg.se/items/kft_koha_biblios' \
+  --data-urlencode 'filter[abstract][_null]=true' \
+  --data-urlencode 'limit=50' \
+  -H 'Authorization: Bearer TOKEN' > books.json
+
+# 2. Berika böckerna
+uv run abstract_enrichment.py --input books.json --output enriched_books.json
+
+# 3. Importera till Directus
+php ../setup/import-enriched-data.php
+```
+
+## Output Format
+
+Enriched data innehåller:
+
+```json
+{
+  "biblio_id": 71069,
+  "isbn_clean": "9789189915299",
+  "title": "Nationalencyklopedins samhällskunskap",
+  "abstract_enriched": "Detta heltäckande läromedel för gymnasieskolan...",
+  "subjects": [
+    "Samhällskunskap",
+    "Nationalekonomi",
+    "Statsvetenskap"
+  ],
+  "tags": [
+    "samhällskunskap",
+    "gymnasieskolan",
+    "läromedel",
+    "gy25"
+  ],
+  "target_audience": "Gymnasiet",
+  "grounding_search_queries": [
+    "Nationalencyklopedins samhällskunskap ISBN 9789189915299"
+  ],
+  "grounding_sources": [
+    {
+      "uri": "https://bokus.com/...",
+      "title": "bokus.com"
+    }
+  ]
+}
+```
+
+## Rate Limits
+
+Google Gemini Free tier:
+- **gemini-2.0-flash-exp**: 15 requests/minut, 1,500 requests/dag
+- **gemini-1.5-flash**: 15 requests/minut, 1,500 requests/dag
+- **gemini-1.5-pro**: 2 requests/minut, 50 requests/dag
+
+**Rekommendation:** Använd `--delay 5.0` för att vara säker på att inte överskrida rate limits.
+
+## Kostnad
+
+Google Gemini är **GRATIS** upp till 1,500 requests/dag på Flash-modellen!
+
+För produktionsmiljö med betald API:
+- **gemini-1.5-flash**: ~$0.00013 per bok
+- **1000 böcker**: ~$0.13 (1.30 SEK)
+
+Extremt kostnadseffektivt jämfört med manuell katalogisering!
+
+## Troubleshooting
+
+### "GEMINI_API_KEY not found"
+
+Säkerställ att `.env` finns i projektets root-directory:
+```bash
+cat ../.env | grep GEMINI_API_KEY
+```
+
+### "Rate limit exceeded"
+
+Öka delay mellan anrop:
+```bash
+uv run enrich_from_directus.py --delay 5.0
+```
+
+Eller vänta 1 minut och försök igen.
+
+### "Invalid API key"
+
+Generera ny API-nyckel på https://aistudio.google.com/app/apikey
+
+### "No biblios to enrich"
+
+Alla böcker har antingen:
+1. Redan ett abstract i `kft_koha_biblios`, eller
+2. Finns redan i `kft_koha_enriched`
+
+Kolla i Directus:
+```bash
+# Hur många böcker saknar abstract?
+curl -s 'https://nav.utvecklingfalkenberg.se/items/kft_koha_biblios' \
+  -G --data-urlencode 'filter[abstract][_null]=true' \
+  -G --data-urlencode 'aggregate[count]=biblio_id' \
+  -H 'Authorization: Bearer TOKEN'
+```
+
+## Best Practices
+
+1. **Börja smått:** Testa med `--limit 5` först
+2. **Använd dry-run:** Kör med `--dry-run` för att se vad som skulle hända
+3. **Rate limiting:** Använd `--delay 2.0` eller högre för stora batchar
+4. **Övervaka:** Kolla Directus GUI efter varje körning
+5. **Backup:** Ta backup av `enriched_books.json` innan stora körningar
+
+## Automation (Optional)
+
+Skapa ett cron-jobb för automatisk berikning:
+
+```bash
+# Lägg till i crontab:
+# Berika 10 böcker varje natt kl 02:00
+0 2 * * * cd /home/httpd/fbg-intranet/integrationer/integration-koha-web/enrich && uv run enrich_from_directus.py --limit 10 >> /var/log/enrich.log 2>&1
+```
+
+## Support
+
+För frågor om enrichment-scripten, se:
+- `../docs/GEMINI_ENRICHMENT.md` - Detaljerad Gemini API-guide
+- `../CLAUDE.md` - Projekt-översikt
+
+**Lycka till med berikningen! 🚀**

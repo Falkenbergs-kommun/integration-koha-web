@@ -1,0 +1,14 @@
+[project]
+name = "falkenbergs-bibliotek"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = [
+    "google-genai",
+    "pydantic",
+    "python-dotenv",
+    "requests",
+]
+
+[project.scripts]
+enrich = "abstract_enrichment:main"
+enrich-directus = "enrich_from_directus:main"

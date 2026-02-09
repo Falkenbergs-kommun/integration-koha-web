@@ -1,0 +1,481 @@
+[
+  {
+    "biblio_id": 71069,
+    "isbn_clean": "9789189915299",
+    "title": "Nationalencyklopedins samhällskunskap för gymnasiet",
+    "abstract_enriched": "Detta heltäckande läromedel för gymnasieskolan är anpassat efter läroplanen Gy25 och täcker nivåerna 1, 2 och 3 i ämnet samhällskunskap. Boken ger eleverna djupgående kunskaper om demokrati, politiska system, ekonomi och internationella relationer genom både teoretiska genomgångar och engagerande fördjupningar. Med ett tydligt fokus på begreppsförståelse och analys uppmuntras eleverna att aktivt delta i samhällsdebatten och utveckla ett vetenskapligt och källkritiskt förhållningssätt.",
+    "subjects": [
+      "Samhällskunskap",
+      "Nationalekonomi",
+      "Statsvetenskap",
+      "Demokrati",
+      "Sociologi",
+      "Mänskliga rättigheter"
+    ],
+    "tags": [
+      "samhällskunskap",
+      "gymnasieskolan",
+      "läromedel",
+      "gy25",
+      "demokrati",
+      "nationalekonomi",
+      "statsvetenskap",
+      "mänskliga rättigheter",
+      "källkritik",
+      "samhällsekonomi"
+    ],
+    "target_audience": "Gymnasiet",
+    "grounding": {
+      "search_queries": [
+        "Nationalencyklopedins samhällskunskap för gymnasiet Andreas Bergh 9789189915299",
+        "9789189915299 Nationalencyklopedin samhällskunskap innehåll"
+      ],
+      "sources": [
+        {
+          "uri": "https://vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQGmQP4ZZ0qT4sW-vE7hYaGckrzBKUG1hqIvHL9BnGFJinv1L9wO9pjZTZon5L91HWTeH_SBlx2hWrFBHC7U3HoMfTYYPQIbMpYthOl24vVJPJlveAmHGq3Pe0BmAnmzUheMnItEuvX8QH296PggmguhdjmGzCH1Zi-ybIA5XfetnRZmAMTiGJYNLeXnai6DsFYhpwY=",
+          "title": "bokus.com"
+        },
+        {
+          "uri": "https://vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQEo0X1PHPwMh0aBP4q21VGzsyEz-wia5PmY-5PDOblMxESgw87d73U5CuGBWK57ouDFWAn4XMrmtVc2lx3fvYJCdYeuhyIq9IBWfI3rIx5y6qLkuy_WxKr_UDH7N7eDJMduEIkeQuOm6KRcqi76-w-oEH63cWVxL30TmW54Ns4B0YNa_FPNcVSL",
+          "title": "ne.se"
+        }
+      ]
+    }
+  },
+  {
+    "biblio_id": 71068,
+    "isbn_clean": "9789189915428",
+    "title": "Nationalencyklopedins samhällskunskap för gymnasiet",
+    "abstract_enriched": "Nationalencyklopedins läromedel i samhällskunskap för gymnasiet är framtaget för att möta kraven i Gy25 och täcker det centrala innehållet för kurserna på nivå 1. Boken kombinerar teoretisk grund med fokus på dagsaktuella samhällsfrågor, källkritik och digital integration för att stimulera elevernas engagemang. Genom pedagogiska sammanfattningar, begreppsdefinitioner och diskussionsövningar tränas eleven i att analysera komplexa samband i dagens globaliserade värld.",
+    "subjects": [
+      "Samhällskunskap",
+      "Statsvetenskap",
+      "Nationalekonomi",
+      "Sociologi",
+      "Internationella relationer",
+      "Demokrati",
+      "Källkritik"
+    ],
+    "tags": [
+      "samhällskunskap",
+      "gymnasieskolan",
+      "gy25",
+      "politik",
+      "ekonomi",
+      "läromedel",
+      "mänskliga rättigheter",
+      "massmedier",
+      "globalisering"
+    ],
+    "target_audience": "Gymnasiet",
+    "grounding": {
+      "search_queries": [
+        "Andreas Bergh samhällskunskap NE gymnasiet innehåll",
+        "Nationalencyklopedins samhällskunskap för gymnasiet Andreas Bergh 9789189915428"
+      ],
+      "sources": [
+        {
+          "uri": "https://vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQFYGLV_fUPNW3floXK0unyfkwPL5yQZljbSiaQ9qmJYr3zQbYxJ3YwLIyODg_E3OMQ0KKs69kPH19USHE6XvjZ9e7iQYiFo_P02pY2_LNxqCx3l4JheJxaURX-pY35fPPMzlnPi8QuBnvyI8vju-9-5hfmkZzSSjFDXd2dRlbfKg3hCQpU65g==",
+          "title": "ginza.se"
+        },
+        {
+          "uri": "https://vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQF3IBfEbPWMmNfi-d00_9gvlNNx1Ho5rALRbJCPHjM1NEJoV8M2DK-0TgjKQD6_5zctWZelrrqvaiwLmAFXMq9exPheN8DuyZSktmVIX8pozpRHHyPGPNtWA7DposZUdOgOCeCOsPWE0zzJgBVdQkAwPSAjzl5EzB9ZppyDwdJvIA72lJcJ0Ew5vNsoXAnj3byYNZW08nnfVes=",
+          "title": "studentapan.se"
+        },
+        {
+          "uri": "https://vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQG6lBBjs9fag8pCmBrCQqM_1GENq_vFZV8YnvgJahn8Z8IugV9gWkIoFM09cxKRRLF4q7oF9fgjKQ7jomyNCyZV3S62iZuznErO2tljkk8tTSmL0qT2jau5Wa4NXiCRqGouQaugEMqDT7nMVshPtZosITQb74Ki4YFaesUGediKmZlXKiL-z4-vZmjLBOE8ovU7UQ==",
+          "title": "bokus.com"
+        },
+        {
+          "uri": "https://vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQF4fty6aeWbZg8l0UzC965jyCbs473SuDPh21rfcwXq9LmyD0HzWlTCwwoNevUYkEMDeBNxiROPye7v1ASyqnSrADrfiyFB451ot0TQTiScWKzes8Mugo6WdxJPWP5Tap2VZAmvKNIk1XNhL5J8J7nXRDF56km4ZLqYIdb9fA==",
+          "title": "ne.se"
+        },
+        {
+          "uri": "https://vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQG4n2584z-YNFMKA7GGQLmSgRiIEscqN0S3ydtSEiqRhc91kHo_6lPD80wTftIE-6STyqnmLGmrhObdtRYXCAdkWe3OExf9zYkvjRq07u_Rlz_OeLy05qPhV2JnnJmWf41qfmejFNP0IKMZD4RUhu2ZnfmH_AT3T5B6nTJuDUXQjmA1LEsVuQ==",
+          "title": "suomalainen.com"
+        }
+      ]
+    }
+  },
+  {
+    "biblio_id": 71067,
+    "isbn_clean": "9781856915458",
+    "title": "Tatra Mountains of Poland and Slovakia Sunflower Walking Guide",
+    "abstract_enriched": "Denna guidebok fokuserar på vandring i Tatrabergen som sträcker sig över gränsen mellan Polen och Slovakien. Boken innehåller 90 olika vandringsleder av varierande svårighetsgrad samt sju bilutflykter som täcker sex olika nationalparker i regionen. Med detaljerade kartor, GPS-spår och praktisk information om lokala transporter och boenden riktar den sig till friluftsentusiaster som vill utforska områdets alpina natur och pittoreska städer.",
+    "subjects": [
+      "Vandring",
+      "Tatrabergen",
+      "Polen",
+      "Slovakien",
+      "Reseguider",
+      "Nationalparker",
+      "Friluftsliv"
+    ],
+    "tags": [
+      "vandring",
+      "tatrabergen",
+      "polen",
+      "slovakien",
+      "friluftsliv",
+      "bergsvandring",
+      "reseguide",
+      "nationalparker",
+      "vandringsleder",
+      "natur"
+    ],
+    "target_audience": "Allmänheten",
+    "grounding": {
+      "search_queries": [
+        "",
+        "Tatra Mountains of Poland and Slovakia Sunflower Walking Guide Sandra Bardwell 9781856915458 summary content",
+        "Tatra Mountains of Poland and Slovakia Sunflower Walking Guide målgrupp innehåll"
+      ],
+      "sources": [
+        {
+          "uri": "https://vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQFrx8v75OR6U_Bx2T9-lwXae1SAe4PJ_w9ClNirHpry-ddNrDJ2kkjLTob5oLHkaRQ5766ZESvHndzTpkzbtqRR1uAVLncLAC_KkWRZ6zVgdr_HwIVXs22iaKghA2KcxzHyNDs3RwVRpqV7ibqh6iHo_oJ5gzWVyu6jjn9NWSx21QIniX0F2T6DBQC8GMICjQh5bhg8QE00jmuAuOoT1nx0RLII5AWeZbgl6k2j5B1ruWAZttT8JN93PHl67g==",
+          "title": "brownsbfs.co.uk"
+        },
+        {
+          "uri": "https://vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQFalIhLkGANDDi94cpuJplniSwhWT9feJ7X6GdXnfESMl0nW15DpHvZ5yhfC4en59b4gVbfbQ-4pKl8_9tm0-mPg458y5vlixdXTUS_94wQJ1HkcVjruQRbwQRNC3P-rUpXGy9XjBbj8MeKVrj1ft9uRLXKZ_lULmYx3vA1EIjV",
+          "title": "sunflowerbooks.co.uk"
+        },
+        {
+          "uri": "https://vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQGSc9th8loC6nzfLdR9lnxjO_zUZgsQefT7ZnrpBatrVImbvnJX2urPBXWTb95Ldl2ZvZZjmOxJSGdXD-_wzuYc5q4CgEgJeTJm05vb5HhmhgE6OlE1olnAQdEhtBmorEChHCwjiK3OykdNvQmFvA2FgYEfX3FzIjnZ7TlqO7nTce_45XS1wThlKYDPRDVDMbt4lPkanWtTKGOpXMZa8sxUZCJI0ZaU5AODeXOb7fHlEEOWXSywZm7VfpU=",
+          "title": "pbshop.store"
+        }
+      ]
+    }
+  },
+  {
+    "biblio_id": 71066,
+    "isbn_clean": "9789147093601",
+    "title": "Inflammationssjukdomar",
+    "abstract_enriched": "Boken ger en pedagogisk och rikt illustrerad genomgång av inflammationsprocessens centrala roll vid folksjukdomar som infektioner, allergi och autoimmunitet. Författarna förklarar hur kroppens immunförsvar fungerar som ett skydd men också hur det kan orsaka skada och symtom som feber och värk. Innehållet bryggar gapet mellan teoretisk immunologi och klinisk vardag genom att beskriva allt från cellnivå till diagnos och behandling.",
+    "subjects": [
+      "Medicin",
+      "Immunologi",
+      "Inflammation",
+      "Patofysiologi",
+      "Sjukdomslära"
+    ],
+    "tags": [
+      "inflammation",
+      "immunologi",
+      "medicin",
+      "patofysiologi",
+      "sjukdomslära",
+      "klinisk medicin",
+      "vårdutbildning",
+      "diagnostik"
+    ],
+    "target_audience": "Högskola, universitet och vårdpersonal (sjuksköterskor, läkare, biomedicinska analytiker)",
+    "grounding": {
+      "search_queries": [
+        "Inflammationssjukdomar Agnes Wold ISBN 9789147093601 innehåll",
+        "Inflammationssjukdomar Agnes Wold Liber sammanfattning"
+      ],
+      "sources": [
+        {
+          "uri": "https://vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQFCnsn5UbLzv3Gy3Tl3WzuTsdkxIEqjLmjfDfrWvTiXVERO3lJMVHevJv9-WaDXXYc_0rksEkZPLHD_lLKALzbVfEx97DRe4rku3KFKCahW-0MpFF7d-0yvpNOCM5pNWxWizsXNC4xyUMpWR7GaHHHxSRZfOld8qb9udR11ogK9OHhOgx5nRf_WQA==",
+          "title": "studentapan.se"
+        },
+        {
+          "uri": "https://vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQFKDGKgAnUWukE5IYZP3QxZSGkTRH1udmuD0n9rjgJ2ftYsKP9muutpxn17StXk0rMVElByFJOdzhS_mqpxA1d7EzoKThUPCq4DKpCmx3ttqLewcztuLj-4Abt4AnDGqwnte5jWH8HF4hS5wlhJUDVXBMCi-LyKPBVv-caKcxWG",
+          "title": "adlibris.com"
+        },
+        {
+          "uri": "https://vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQHgIMKFOD8jXdHQdbxZQFjboSH-Il0gkK15bBcl3oLX5Xbv0Y0xkgNSshesNlJ4MJXptkZptCke-ppxb2OwD0CR8RcNuY2UXX7O3cc7M8SrxU8fNw-8yzDnuJU9lo1rsgqk5Xs3qVpEfua7o_jDMaV5mEaCe8lRjIF9-642t2s8E82LCdc=",
+          "title": "liber.se"
+        }
+      ]
+    }
+  },
+  {
+    "biblio_id": 71065,
+    "isbn_clean": "9789199049700",
+    "title": "Kärlek utan tjafs",
+    "abstract_enriched": "Kärlek utan tjafs är en praktisk handbok för att skapa harmoniska och medvetna kärleksrelationer genom att bryta destruktiva kommunikationsmönster. Författaren Anneli Påmark (tillsammans med Carl Österberg) guidar läsaren i hur man hanterar känslomässiga triggrar, förstår underliggande behov och ökar sin hjärtintelligens. Boken erbjuder konkreta verktyg för att ersätta vardagskonflikter med djupare närhet och är skriven för både par och individer som vill utveckla sin relationella förmåga.",
+    "subjects": [
+      "Relationer",
+      "Kommunikation",
+      "Självhjälp",
+      "Parrelationer",
+      "Personlig utveckling"
+    ],
+    "tags": [
+      "relationer",
+      "kommunikation",
+      "konflikthantering",
+      "parrelationer",
+      "självhjälp",
+      "hjärtintelligens",
+      "personlig utveckling",
+      "medveten närvaro"
+    ],
+    "target_audience": "Allmänheten",
+    "grounding": {
+      "search_queries": [
+        "Anneli Påmark Kärlek utan tjafs innehåll",
+        "Kärlek utan tjafs Anneli Påmark 9789199049700"
+      ],
+      "sources": [
+        {
+          "uri": "https://vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQFkUzkaoTgeLMVJMYgrmnHx31CWcrohsC5UpKyFp_FdLQLDWoNoBVdRs0bb3mP6Q7VbJNID-5bpK-s60N1T_N9Er8X9-knorJcvc1pau7Xyonf2uQQj9GZT",
+          "title": "humanawareness.se"
+        },
+        {
+          "uri": "https://vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQFWPCf8fvo8jO4mj-fgkrIbJbz6FGioVAC03RBlCHDLVhLDEIcj0YOSsvX80Ma2yOHUeKhNTZuooZAl_oUududfcEId7Y2xbgTy649PpsZ3i-fdzYsReTYgprrkoxxr1A4INEKIO47iIUw=",
+          "title": "humanawareness.se"
+        },
+        {
+          "uri": "https://vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQEUed5tBFF7ahw-6u46f_djAnlPALGCB797-tAYBx8RoVCFq-vKmLjZD6O8OmqhOAMKKmyr8GpFSBhzc90UDiaubg2H3w_IrAYMrzDCLFr_4FaVrre_Flqmy6_j_gT6J9WLYcKxpt7Ljwp0gKeS-vg0E_9RfZyv3Aa3xgY=",
+          "title": "humanawareness.se"
+        },
+        {
+          "uri": "https://vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQHKFa8ZeOU4QzvdxDtsQATI5T8IVeNARGMsLoiCJt3x0CYBigZfG7dBbOI3z4EkxHQk49uz8EKXfgcyUcr-eP5vvhROPKlNvFkCmwZ_rv1Ym_ZT7DjuOvR7DO9GghqRO9FNu4aIOA==",
+          "title": "youtube.com"
+        },
+        {
+          "uri": "https://vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQGJIrzjTnQJQycol_Se-eyGJn0ZRwvTB6cUpix-Wb6gp-YgZOKr76tykn7jRzzIMFo-07t3GJYRr9ZyPPltaM2cL_0_FchayS8-TeexEazUqtGfBYzWF37FFudBjrFuD0JDwidoGCkm7vXJ3GMMGe8=",
+          "title": "legimus.se"
+        },
+        {
+          "uri": "https://vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQF0iUe5m3yoOF91HA209GnvKww0HQ-rTBXEcD3MdJtFq5r6x34YrhKEvpr7gKu8abIoVRYop7lm8wwBUD3qqhSUt-zF8uIMtYk8w91k0YUmAjlReI7AC2emZpa5VDXEgMZ1pQ0q_x-p18QJz8-0hCAitRo53I4pNg2bD8m3TTYHBIhVBNFBr5QqyC3SMd1Zn1a7_cqHS6k2WCDO",
+          "title": "bokus.com"
+        },
+        {
+          "uri": "https://vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQEDozdO0jp8KD4Nx6XBM9MhdxcFO8Xr2Ctvq4g86fVd6_TGl_wW65WAuilp5SCZi_7gnABYQLM_RmR9tqhqLltM4D-AiSsLYnnfEoiEa2yBMuYdkMWSpA54mi58sjoseWYkG80Rmda1y3mKjpLobiFQdYL1OXqwz8uHKQ==",
+          "title": "bookis.com"
+        }
+      ]
+    }
+  },
+  {
+    "biblio_id": 71063,
+    "isbn_clean": "9789151111179",
+    "title": "Kompass till samhällskunskap",
+    "abstract_enriched": "Kompass till samhällskunskap 100 är ett heltäckande läromedel anpassat för gymnasieskolans kurs i samhällskunskap enligt Gy25-reformen. Boken fokuserar på att göra komplexa ämnen som demokrati, mänskliga rättigheter och samhällsekonomi begripliga genom ett enkelt språk och vardagsnära exempel. Med fokus på källkritik och analys tränas eleverna i att kritiskt granska sin omvärld och förstå politiska och sociala samband.",
+    "subjects": [
+      "Samhällskunskap",
+      "Demokrati",
+      "Statsvetenskap",
+      "Nationalekonomi",
+      "Sociologi",
+      "Mänskliga rättigheter"
+    ],
+    "tags": [
+      "samhällskunskap",
+      "demokrati",
+      "mänskliga rättigheter",
+      "gymnasieskola",
+      "källkritik",
+      "nationalekonomi",
+      "politik",
+      "läromedel",
+      "gy25"
+    ],
+    "target_audience": "Gymnasiet och Komvux",
+    "grounding": {
+      "search_queries": [
+        "",
+        "Kompass till samhällskunskap Maria Eliasson 9789151111179 innehåll målgrupp",
+        "9789151111179 Kompass till samhällskunskap Gleerups"
+      ],
+      "sources": [
+        {
+          "uri": "https://vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQHtzxF8-yFKTLHuwGAsKQFxnSiGqWaccfvIVC3FlZZkxBMzJwxOUa9WsnVHVQLmjwSb-TEw3waZVxNui0iEZiTKEy_JCW_gHmbn4fmntd8MPs7fQBbAK5k1OKHY0qJKgQJivudjaeOK2VPOxgKvJW4M_MSAyt3vZntB0cbrQcd5glaKNEpPl_2aKJ-cWGtxSyhHzA==",
+          "title": "adlibris.com"
+        },
+        {
+          "uri": "https://vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQEJh-dG4XJefrq8udmsftXlHSRj9D1cN251L1Xi8eIl2aKFSztmo5sZWI5Z2ZuoYFGetr9gMupOHjNHWJrAa3hdOFxQP9pgsrs3MzwhvN2Z-6c3CXLvZIyPxAKRnf5KFp4TKXLdxHBdnv27-RwIvJxzdi3cEyb4NPv5T218Hvpl7zqY6FbiQJk8WsB10Iea8w==",
+          "title": "spsm.se"
+        }
+      ]
+    }
+  },
+  {
+    "biblio_id": 71060,
+    "isbn_clean": "9789177755210",
+    "title": "Diktatorn",
+    "abstract_enriched": "I 'Diktatorn: Från Caesar till Putin' utforskar historikern Dick Harrison diktaturens väsen genom att granska envåldshärskare från antiken fram till idag. Boken analyserar de gemensamma mönster och strategier som despoter använder för att gripa, behålla och utöva makt, samt de faktorer som leder till deras fall. Det är en djuplodande och aktuell studie av politisk maktutövning som vänder sig till en historieintresserad allmänhet.",
+    "subjects": [
+      "Historia",
+      "Statsvetenskap",
+      "Diktatur",
+      "Politisk historia",
+      "Makt"
+    ],
+    "tags": [
+      "diktatur",
+      "historia",
+      "makt",
+      "autokrati",
+      "tyranni",
+      "statsvetenskap",
+      "politisk utveckling",
+      "ledarskap"
+    ],
+    "target_audience": "Allmänheten",
+    "grounding": {
+      "search_queries": [
+        "Diktatorn Dick Harrison bokrecension sammanfattning",
+        "Dick Harrison Diktatorn 9789177755210 innehåll sammanfattning"
+      ],
+      "sources": [
+        {
+          "uri": "https://vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQH9K5W8UwAKhlMmYK3WgCmWpD47LhFM__D0YRYv4XPXRftvOnG-CZx8ikOUMMdZBpxKn3kC6saG7Qrndpi408pcPgbRMmCmbZG4lAG9GOLT-8POJLKWz5ogeRjRUyxcsXWTTdkFNSc9PYBgJ9VwYv2hqrCoZJJofkohscW8JIkUr7YT0OTdUbxEhFpCZCQ6h1gJEQ1xAUC1QoYPxAH6JlBkgx8ei2eh58RL",
+          "title": "hemtrevligt.se"
+        },
+        {
+          "uri": "https://vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQHvP7-RVlO5f0GJySrjBjSvzVDoTHa1PUmBpdm3J9daex2q_aovRIdxM0sOpFq9iK1aIbk3jruMdatuRcgAXaKFCIpxSxN8tdNXwt4w07mtFVrB6hKOdpZRlsl1v9lvPBp2Iiu8IXGdFcyzXosmBHfETIzUymPvsTNcVDA02EsFFCtG-zRjBIYe19-6hoWGsI4L54DMy96x8LzK4i_hGvsJjG4bNXnvpYK3Izse3g==",
+          "title": "sv.se"
+        },
+        {
+          "uri": "https://vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQHM0FKX4MZFEN4ftKDEVHacTLJpunBLJRJPLclZy_1h_H03dN-FQpB1s4FCcVZjGhA9F-hhGxcr6UjkNpWy9Bt1ceo-sxoqgj8fTAD5AUPTN1lmv9fOm1OloTvtb71eZU3EVj_W6pt_wFEF7Ma2pA==",
+          "title": "ordfrontforlag.se"
+        },
+        {
+          "uri": "https://vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQFeBTQe8e6PNZkDR388A1eR1rcWzXffBNGWf0xYgHm086gD8Yn6InWk-p-3_-oUwQuy3msuhwoW6Cm1crqQQpxPLMr5Xde87He4IQ7FhOMOBpLPSyuCrRb9WpUqqhqvx2IdqPF9KhHg6FGSRNMPIyVdvoJEglimYcx3TDKtm2je13uQpA==",
+          "title": "bokus.com"
+        },
+        {
+          "uri": "https://vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQFD0IbN66dPzK6heQkcLmmrHsY166oreA0KOgbfIUWkOUcZB-V4pMxZdIdPlgydpolTpw1LYoOQJSZYRWBG5ODzyH96C1vMi3b7bFapjL6vK1RJKCf6uRUXGmvhkPLi6OaFKNPVTvfu088P-qiAUa189Q==",
+          "title": "storytel.com"
+        }
+      ]
+    }
+  },
+  {
+    "biblio_id": 71059,
+    "isbn_clean": "9789151975580",
+    "title": "Det naturliga universalmedlet",
+    "abstract_enriched": "Det naturliga universalmedlet är en svensk översättning av Thomas E. Levys bok Primal Panacea, som utforskar C-vitaminets avgörande betydelse för människans hälsa. Författaren går igenom vetenskapliga belägg för hur högdosbehandling med C-vitamin kan motverka en mängd sjukdomar och fungera som en kraftfull antioxidant. Boken ger praktiska insikter i varför extra tillskott ofta krävs i den moderna vardagen och riktar sig till såväl hälsointresserade privatpersoner som yrkesverksamma inom sjukvården.",
+    "subjects": [
+      "Populärmedicin",
+      "C-vitamin",
+      "Näringslära",
+      "Kosttillskott",
+      "Antioxidanter"
+    ],
+    "tags": [
+      "c-vitamin",
+      "hälsa",
+      "kosttillskott",
+      "näringsmedicin",
+      "antioxidanter",
+      "immunförsvar",
+      "välmående",
+      "sjukdomsförebyggande"
+    ],
+    "target_audience": "Allmänheten och sjukvårdspersonal",
+    "grounding": {
+      "search_queries": [
+        "",
+        "Magnesium: Reversing Disease Thomas E. Levy Swedish translation",
+        "Det naturliga universalmedlet bok Thomas E. Levy sammanfattning",
+        "Det naturliga universalmedlet Thomas E. Levy 9789151975580"
+      ],
+      "sources": [
+        {
+          "uri": "https://vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQEHgDZHyOS9HcXLwn5AXhaFSAPYOpYTI-wUWA-dwtqVh7Y21hp_fFwkWSPPoPI6p9HFiQL_vt-xQ6VOzi4MJDrGjUJ7QdLqWb64U_Zvl4VLV47XQ035bnhOUEppxyddwiHB5weGx-kyOhcBF9n0BaMCt8wfnWgZby1TOkQCbHYC6A==",
+          "title": "bokus.com"
+        },
+        {
+          "uri": "https://vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQF6uBAw8a73vlYmp8D8sEfx14nfNSrArkBy6V3sZHpish-vizL0L4LCeOzwnPl1KNGpnF6XuOmOBWi7nIey5r-FeTefUw6Z9qVdDg72cLPUIk4YOA5WH8Mx6cXRen_AdxkAdTlmvRzYZosmFGM_F_SUYmnyTtk=",
+          "title": "adlibris.com"
+        },
+        {
+          "uri": "https://vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQEgVzCw3yJFx5zl0iguKU82CESRvYcKGUGq30Yd7ZeMsyZW83qwIGdpnmmSB2Xly1i_C9n81jcdx3eOmI3rzzkFIGuQJ_CVOjAvM91eo_8cSISfiQl_d58jKwXnVAJ-BweelPv1LLWZGrfMc22YOp9S4MBptAkRJ-qKuoLQoA==",
+          "title": "google.com"
+        }
+      ]
+    }
+  },
+  {
+    "biblio_id": 71058,
+    "isbn_clean": "9789176952108",
+    "title": "Företagets ekonomi",
+    "abstract_enriched": "Denna handbok ger en grundläggande introduktion till företagsekonomi och är särskilt framtagen för personer som behöver förstå ekonomiska rapporter utan att vara utbildade ekonomer. Boken förklarar pedagogiskt begrepp som bokföring, bokslut, nyckeltal och budgetering samt hur dessa används för att styra och följa upp en verksamhet. Genom praktiska exempel och en omfattande ordlista blir komplicerade ekonomiska samband begripliga för både småföretagare och chefer.",
+    "subjects": [
+      "Företagsekonomi",
+      "Redovisning",
+      "Ekonomisk styrning",
+      "Entreprenörskap"
+    ],
+    "tags": [
+      "företagsekonomi",
+      "ekonomi för icke-ekonomer",
+      "bokföring",
+      "nyckeltal",
+      "budgetering",
+      "årsredovisning",
+      "kalkylering",
+      "företagsformer"
+    ],
+    "target_audience": "Icke-ekonomer, småföretagare och chefer",
+    "grounding": {
+      "search_queries": [
+        "9789176952108 Företagets ekonomi sammanfattning",
+        "Företagets ekonomi Pål Carlsson 9789176952108 innehåll målgrupp"
+      ],
+      "sources": [
+        {
+          "uri": "https://vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQEOzHgUKHFsM3r3qDrB7jGnBfmBZchrfImdsgUqVLE_vpefwOarVq_N9CmC4hPsw8iT8x-lnBExfdfWcS2fyItTjequ3moVjwbsADtfXJRM7LuE48Ikn3dDa9rA6ZZ4vo8Veau75jZ-KeKihxB5Yw3sEcDhJfdOTTB90DyLwtSF7CfZcTjblqjIy0OvXeIC",
+          "title": "bjornlunden.se"
+        },
+        {
+          "uri": "https://vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQGy2KhHV-neT27mp9Q5tmTHlFrrDw5h6kxoA5RhFpFzKiwkoSl6pAilhhqUtQu4xUmlIkTX2rGLWBA6eZhY4nTpeNiDL2_py5B4czsRXCZZMROrHsjtcfejDKOREmj-t2qplUzsejYSI_tL7__RCS3SYSGvFpKn",
+          "title": "bokus.com"
+        },
+        {
+          "uri": "https://vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQG90uLPAouHco99Q84fQAqYaIWTAT9OBSMKlAEYM8Ie9dA-Y_kRmYNYgGuHkw7oj_i2XSEc5UQmXEmq5p4eArFde3HUjCM0IPysSlRIrMyijJDM4bD83qdMTmljdD_iegML-mzEmpG_LbzS",
+          "title": "jure.se"
+        }
+      ]
+    }
+  },
+  {
+    "biblio_id": 71057,
+    "isbn_clean": "9789101001536",
+    "title": "I skuggan av framtiden",
+    "abstract_enriched": "I skuggan av framtiden är ett prisbelönt standardverk som skildrar modernitetens idéhistoria från upplysningen till vår tid. Sven-Eric Liedman analyserar spänningen mellan den tekniskt-ekonomiska utvecklingen ('den hårda upplysningen') och strävan efter mänsklig frigörelse och demokrati ('den mjuka upplysningen'). Boken utforskar hur vår syn på vetenskap, politik, konst och utbildning har formats i mötet med industrialismens och modernismens framväxt.",
+    "subjects": [
+      "Idéhistoria",
+      "Modernitet",
+      "Filosofi",
+      "Samhällsvetenskap",
+      "Upplysningen"
+    ],
+    "tags": [
+      "idéhistoria",
+      "modernitet",
+      "upplysningen",
+      "samhällskritik",
+      "vetenskapshistoria",
+      "politisk filosofi",
+      "framstegstanke",
+      "kulturhistoria"
+    ],
+    "target_audience": "Högskola och den bildningsintresserade allmänheten",
+    "grounding": {
+      "search_queries": [
+        "I skuggan av framtiden Sven-Eric Liedman sammanfattning 9789101001536",
+        "Liedman I skuggan av framtiden teman målgrupp"
+      ],
+      "sources": [
+        {
+          "uri": "https://vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQHNWRzD5xUanhdhQhidUYeDZqdNGpfh4PA2VV6_0-O2GleI5R0jDmdqWfmMbLSOm2WVfOIDj-wGq0Y_tY3Ofb53qvF9Wx5QFhUxsJwpdqBjV4ZB91Agi0_N2OpEixkRiwkTig==",
+          "title": "liedman.net"
+        },
+        {
+          "uri": "https://vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQH02iqvgwTbtZ71_WeYLi9jX4FvP5IC0Ad91dYpDCRTszOTr-K7tz0WlhDJFzE-xSkvKzEUifok-8x-v9_LoKs2bXv9V8tKKTJ9J2wGAcx1Zx1ZG6qeEqIDHwudcPQjDSTtSSt8-O95FvToXClESTSFTmP_wfY7kqcC4KmmcM2z0v03R2l4IO-TV8qHX2taulWe4Jmgi2c8WtCGWaE=",
+          "title": "google.com"
+        },
+        {
+          "uri": "https://vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQGg16NzaKZb-eD3pjSP96CZ7C3lln6iPDc81SkiR5ZZAW05GhTiEjB9qmWTfjEdZDSelsTVFpPbmqAkq_rYrT5OEeA-CiPppw19kaydUk7jU0Up7yP0iUkSYoAXyVXKvm4pVdobCURay9kKkOAxBSv-NfvPSzse",
+          "title": "storytel.com"
+        }
+      ]
+    }
+  }
+]

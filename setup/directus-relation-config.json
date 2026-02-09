@@ -1,0 +1,112 @@
+{
+  "relation": {
+    "collection": "kft_koha_biblios",
+    "field": "enriched",
+    "related_collection": "kft_koha_enriched",
+    "meta": {
+      "many_collection": "kft_koha_enriched",
+      "many_field": "biblio_id",
+      "one_collection": "kft_koha_biblios",
+      "one_field": "biblio_id",
+      "one_collection_field": "enriched",
+      "one_allowed_collections": null,
+      "junction_field": null,
+      "sort_field": null,
+      "one_deselect_action": "nullify"
+    },
+    "schema": {
+      "constraint_name": "fk_biblio_id",
+      "table": "kft_koha_enriched",
+      "column": "biblio_id",
+      "foreign_key_table": "kft_koha_biblios",
+      "foreign_key_column": "biblio_id",
+      "on_update": "CASCADE",
+      "on_delete": "CASCADE"
+    }
+  },
+  "field": {
+    "collection": "kft_koha_biblios",
+    "field": "enriched",
+    "type": "alias",
+    "meta": {
+      "interface": "list-o2m",
+      "special": ["o2m"],
+      "options": {
+        "template": "{{abstract_enriched}}",
+        "enableCreate": false,
+        "enableSelect": true
+      },
+      "display": "related-values",
+      "display_options": {
+        "template": "{{title}} - {{target_audience}}"
+      },
+      "readonly": false,
+      "hidden": false,
+      "width": "full",
+      "translations": null,
+      "note": "AI-enriched metadata with enhanced abstracts, subjects and tags"
+    }
+  },
+  "reverse_relation": {
+    "relation": {
+      "collection": "kft_koha_enriched",
+      "field": "biblio",
+      "related_collection": "kft_koha_biblios",
+      "meta": {
+        "many_collection": "kft_koha_enriched",
+        "many_field": "biblio_id",
+        "one_collection": "kft_koha_biblios",
+        "one_field": null,
+        "one_collection_field": null,
+        "one_allowed_collections": null,
+        "junction_field": null,
+        "sort_field": null,
+        "one_deselect_action": "nullify"
+      }
+    },
+    "field": {
+      "collection": "kft_koha_enriched",
+      "field": "biblio",
+      "type": "integer",
+      "meta": {
+        "interface": "select-dropdown-m2o",
+        "special": ["m2o"],
+        "options": {
+          "template": "{{biblio_id}} - {{title}}"
+        },
+        "display": "related-values",
+        "display_options": {
+          "template": "{{title}}"
+        },
+        "readonly": false,
+        "hidden": false,
+        "width": "full",
+        "translations": null,
+        "note": "Reference to parent biblio record"
+      }
+    }
+  },
+  "setup_instructions": {
+    "step1": "Create the kft_koha_enriched collection first using the SQL DDL or JSON definition",
+    "step2": "Apply this relation configuration via Directus API or manually in the Admin UI",
+    "step3": "Test the relation by querying: /items/kft_koha_biblios/{id}?fields=*,enriched.*",
+    "note": "The O2M (One-to-Many) relation allows each biblio to have one enriched record. The M2O (Many-to-One) reverse relation allows enriched records to reference their parent biblio."
+  },
+  "example_api_calls": {
+    "get_biblio_with_enriched": {
+      "method": "GET",
+      "url": "/items/kft_koha_biblios/71069?fields=*,enriched.*",
+      "description": "Fetch a biblio with its enriched metadata"
+    },
+    "get_enriched_with_biblio": {
+      "method": "GET",
+      "url": "/items/kft_koha_enriched?filter[biblio_id][_eq]=71069&fields=*,biblio.*",
+      "description": "Fetch enriched data with parent biblio details"
+    },
+    "search_enriched_join_biblio": {
+      "method": "GET",
+      "url": "/items/kft_koha_enriched?search=demokrati&fields=*,biblio.title,biblio.author",
+      "description": "Search enriched abstracts and include parent biblio info"
+    }
+  }
+}
