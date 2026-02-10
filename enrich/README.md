@@ -4,7 +4,7 @@ Automatisk berikning av bibliografisk metadata med Google Gemini AI.
 
 ## Scripts
 
-###1. `enrich_smart.py` (✨ REKOMMENDERAD FÖR STORA DATASET)
+### 1. `enrich_smart.py` (✨ REKOMMENDERAD FÖR STORA DATASET)
 
 **Optimerad för skalbarhet** - Kan hantera 26,000+ böcker utan minnesproblem.
 
@@ -28,9 +28,11 @@ uv run enrich_smart.py --limit 50 --start-offset 3000
 # Dry-run för att se vad som skulle berika
 uv run enrich_smart.py --dry-run --limit 10
 
-# Använd Pro-model för bättre kvalitet
-uv run enrich_smart.py --limit 10 --model gemini-1.5-pro
+# Med custom delay mellan anrop
+uv run enrich_smart.py --limit 100 --delay 2.0
 ```
+
+**VIKTIGT:** Använd endast modell `gemini-3-flash-preview` (default). Andra modeller stöder inte Google Search + JSON samtidigt.
 
 **Varför använda denna:**
 - ✅ Fungerar när du har 3000+ redan berikade böcker
@@ -60,12 +62,11 @@ uv run enrich_from_directus.py --limit 25
 # Dry-run (visa vad som skulle göras utan att spara)
 uv run enrich_from_directus.py --dry-run
 
-# Använd annan modell
-uv run enrich_from_directus.py --model gemini-1.5-pro
-
-# Längre delay mellan anrop (för att vara snäll mot API)
+# Längre delay mellan anrop
 uv run enrich_from_directus.py --delay 2.0
 ```
+
+**OBS:** Fungerar bara när < 3000 böcker redan är berikade. För större dataset, använd `enrich_smart.py`.
 
 **Kräver i `.env`:**
 ```env
@@ -74,7 +75,7 @@ DIRECTUS_API_URL=https://nav.utvecklingfalkenberg.se
 DIRECTUS_API_TOKEN=your-directus-token
 ```
 
-### 2. `abstract_enrichment.py` (Original)
+### 3. `abstract_enrichment.py` (Fil-baserad, för export/import)
 
 Läser från fil, berikar, och sparar till fil. Bra för batch-processing av exporterad data.
 
@@ -121,17 +122,30 @@ uv pip install google-genai pydantic python-dotenv requests
 
 ## Workflow
 
-### Rekommenderad Process (Automatisk)
+### Rekommenderad Process (För stora dataset)
 
 ```bash
-# 1. Berika 10 nya böcker
-uv run enrich_from_directus.py --limit 10
+# 1. Berika 100 böcker med smart pagination
+uv run enrich_smart.py --limit 100
 
-# 2. Verifiera i Directus GUI
+# 2. Om du vet var oberikade böcker börjar, använd start-offset
+uv run enrich_smart.py --limit 100 --start-offset 3100
+
+# 3. Verifiera i Directus GUI
 #    https://nav.utvecklingfalkenberg.se/admin
 #    Content → kft_koha_enriched
 
-# 3. Kör igen för fler böcker
+# 4. Fortsätt med nästa batch
+uv run enrich_smart.py --limit 100 --start-offset 3200
+```
+
+### Alternativ Process (För små dataset < 3000 böcker)
+
+```bash
+# 1. Berika 25 nya böcker
+uv run enrich_from_directus.py --limit 25
+
+# 2. Verifiera och upprepa
 uv run enrich_from_directus.py --limit 25
 ```
 
@@ -187,22 +201,24 @@ Enriched data innehåller:
 
 ## Rate Limits
 
-Google Gemini Free tier:
-- **gemini-2.0-flash-exp**: 15 requests/minut, 1,500 requests/dag
-- **gemini-1.5-flash**: 15 requests/minut, 1,500 requests/dag
-- **gemini-1.5-pro**: 2 requests/minut, 50 requests/dag
+**Modell som används:** `gemini-3-flash-preview`
+- Med billing: 360 requests/minut, 10,000+ requests/dag
+- Gratis tier: 15 requests/minut, 1,500 requests/dag
 
-**Rekommendation:** Använd `--delay 5.0` för att vara säker på att inte överskrida rate limits.
+**Rekommendation:**
+- Default delay (1.0 sekund) fungerar bra för billing-konto
+- För gratis tier: Använd `--delay 5.0` för att vara säker
 
 ## Kostnad
 
-Google Gemini är **GRATIS** upp till 1,500 requests/dag på Flash-modellen!
+**Modell:** `gemini-3-flash-preview`
+- **Per bok:** ~$0.00013 - $0.00015 (0.013-0.015 öre)
+- **100 böcker:** ~$0.013 USD (~0.13 SEK)
+- **1000 böcker:** ~$0.13 USD (~1.30 SEK)
 
-För produktionsmiljö med betald API:
-- **gemini-1.5-flash**: ~$0.00013 per bok
-- **1000 böcker**: ~$0.13 (1.30 SEK)
+**Gratis tier:** Upp till 1,500 requests/dag - perfekt för testning!
 
-Extremt kostnadseffektivt jämfört med manuell katalogisering!
+**Jämförelse:** Manuell katalogisering kostar 200-400 SEK per bok. AI-berikning är **99.9% billigare**!
 
 ## Troubleshooting
 
@@ -255,8 +271,17 @@ Skapa ett cron-jobb för automatisk berikning:
 
 ```bash
 # Lägg till i crontab:
-# Berika 10 böcker varje natt kl 02:00
-0 2 * * * cd /home/httpd/fbg-intranet/integrationer/integration-koha-web/enrich && uv run enrich_from_directus.py --limit 10 >> /var/log/enrich.log 2>&1
+# Berika 50 böcker varje natt kl 02:00
+0 2 * * * cd /home/httpd/fbg-intranet/integrationer/integration-koha-web/enrich && uv run enrich_smart.py --limit 50 >> /var/log/enrich.log 2>&1
+```
+
+**Tips:** Använd olika start-offsets för olika veckodagar för att sprida arbetet:
+```bash
+# Måndag: offset 0-1000
+0 2 * * 1 cd /path/to/enrich && uv run enrich_smart.py --limit 50 --start-offset 0
+# Tisdag: offset 1000-2000
+0 2 * * 2 cd /path/to/enrich && uv run enrich_smart.py --limit 50 --start-offset 1000
+# osv...
 ```
 
 ## Support
