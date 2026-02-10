@@ -12,3 +12,4 @@ dependencies = [
 [project.scripts]
 enrich = "abstract_enrichment:main"
 enrich-directus = "enrich_from_directus:main"
+enrich-smart = "enrich_smart:main"

@@ -4,7 +4,41 @@ Automatisk berikning av bibliografisk metadata med Google Gemini AI.
 
 ## Scripts
 
-### 1. `enrich_from_directus.py` (NY! Rekommenderad)
+###1. `enrich_smart.py` (✨ REKOMMENDERAD FÖR STORA DATASET)
+
+**Optimerad för skalbarhet** - Kan hantera 26,000+ böcker utan minnesproblem.
+
+Använder smart pagination för att hitta oberikade böcker även när 1000-tals böcker redan är berikade.
+
+**Funktioner:**
+- ✅ **Pagination-baserad sökning** - hoppar över redan berikade böcker
+- ✅ Batched checking (50 böcker åt gången)
+- ✅ Start-offset support - börja från godtycklig position
+- ✅ Kan hantera miljontals poster utan minnesslut
+- ✅ Google Search grounding + cost tracking
+
+**Usage:**
+```bash
+# Berika 100 böcker (rekommenderat)
+uv run enrich_smart.py --limit 100
+
+# Starta från specific offset (om du vet var oberikade böcker börjar)
+uv run enrich_smart.py --limit 50 --start-offset 3000
+
+# Dry-run för att se vad som skulle berika
+uv run enrich_smart.py --dry-run --limit 10
+
+# Använd Pro-model för bättre kvalitet
+uv run enrich_smart.py --limit 10 --model gemini-1.5-pro
+```
+
+**Varför använda denna:**
+- ✅ Fungerar när du har 3000+ redan berikade böcker
+- ✅ Undviker "Request Header Too Large"-fel
+- ✅ Skannar automatiskt igenom databas tills oberikade böcker hittas
+- ✅ Sparar tid genom att inte läsa in alla ID:n i minnet
+
+### 2. `enrich_from_directus.py` (Original, fungerar för små dataset < 3000 böcker)
 
 Hämtar böcker från Directus, berikar med Gemini AI, och sparar direkt tillbaka till Directus.
 
