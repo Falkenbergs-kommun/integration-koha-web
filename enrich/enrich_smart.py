@@ -172,17 +172,45 @@ class DirectusClient:
 
         return enriched
 
-    def save_enriched_book(self, enriched_data: dict) -> bool:
-        """Save enriched book data to kft_koha_enriched."""
+    def save_enriched_book(self, enriched_data: dict) -> tuple[bool, str]:
+        """
+        Save enriched book data to kft_koha_enriched.
+
+        Returns:
+            (success, error_message)
+        """
         url = f"{self.api_url}/items/kft_koha_enriched"
 
         try:
             response = requests.post(url, headers=self.headers, json=enriched_data, timeout=30)
             response.raise_for_status()
-            return True
+            return True, ""
+        except requests.exceptions.HTTPError as e:
+            # Try to parse error response
+            error_msg = str(e)
+            try:
+                error_data = e.response.json()
+                if 'errors' in error_data:
+                    errors = error_data['errors']
+                    # Check for duplicate key error
+                    for error in errors:
+                        error_str = str(error)
+                        # Check for duplicate/unique in message or RECORD_NOT_UNIQUE code
+                        if ('duplicate' in error_str.lower() or
+                            'unique' in error_str.lower() or
+                            'RECORD_NOT_UNIQUE' in error_str):
+                            return False, "DUPLICATE"
+                    error_msg = '; '.join([str(err) for err in errors])
+                elif 'message' in error_data:
+                    error_msg = error_data['message']
+            except:
+                pass
+
+            print(f"Error saving enriched book: {error_msg}", file=sys.stderr)
+            return False, error_msg
         except Exception as e:
             print(f"Error saving enriched book: {e}", file=sys.stderr)
-            return False
+            return False, str(e)
 
 
 # ── Gemini Enrichment ─────────────────────────────────────────────────────
@@ -396,12 +424,19 @@ def main():
             'enrichment_cost_usd': cost_usd
         }
 
-        if directus.save_enriched_book(enriched_data):
+        success, error_msg = directus.save_enriched_book(enriched_data)
+        if success:
             print(f"      ✓ Saved to Directus")
             enriched_count += 1
             total_cost += cost_usd
         else:
-            print(f"      ✗ Failed to save to Directus")
+            if error_msg == "DUPLICATE":
+                print(f"      ⚠ Already enriched (skipping)")
+                # Count as success since book is enriched
+                enriched_count += 1
+                total_cost += cost_usd
+            else:
+                print(f"      ✗ Failed to save to Directus")
 
         print()
 
