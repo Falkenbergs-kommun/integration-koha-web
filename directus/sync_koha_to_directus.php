@@ -111,49 +111,114 @@ function transformKohaToDirectus($kohaBook)
 }
 
 /**
- * Fetch biblios from Koha API
+ * Fetch ALL biblios from Koha API using pagination.
  *
  * @param string $apiBaseUrl Base URL for Koha API
  * @param string $token OAuth access token
- * @param int $limit Number of biblios to fetch
  * @param bool $verbose Verbose output
- * @return array Array of biblios
+ * @return array Array of all biblios
  */
-function fetchKohaBiblios($apiBaseUrl, $token, $limit = 100, $verbose = false)
+function fetchKohaBiblios($apiBaseUrl, $token, $verbose = false)
 {
-    // Build URL with query parameters
-    $url = rtrim($apiBaseUrl, '/') . '?_order_by=-biblio_id&_per_page=' . $limit;
+    $baseUrl = rtrim($apiBaseUrl, '/');
+    $perPage = 500;
+    $page = 1;
+    $all = [];
 
-    if ($verbose) {
-        echo "   API URL: {$url}\n";
+    while (true) {
+        $url = "{$baseUrl}?_order_by=-biblio_id&_per_page={$perPage}&_page={$page}";
+
+        if ($verbose) {
+            echo "   Fetching page {$page}: {$url}\n";
+        }
+
+        $ch = curl_init();
+        curl_setopt($ch, CURLOPT_URL, $url);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+        curl_setopt($ch, CURLOPT_HTTPHEADER, [
+            'Accept: application/json',
+            'Authorization: Bearer ' . $token
+        ]);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 120);
+
+        $response = curl_exec($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $error = curl_error($ch);
+        curl_close($ch);
+
+        if ($httpCode !== 200 || !$response) {
+            throw new Exception("Failed to fetch biblios from Koha API page {$page} (HTTP {$httpCode}): {$error}");
+        }
+
+        $biblios = json_decode($response, true);
+
+        if (!is_array($biblios)) {
+            throw new Exception("Invalid API response on page {$page}: expected array of biblios");
+        }
+
+        $all = array_merge($all, $biblios);
+        echo "  Page {$page}: " . count($biblios) . " biblios (total so far: " . count($all) . ")\n";
+
+        // If fewer results than page size, we've reached the last page
+        if (count($biblios) < $perPage) {
+            break;
+        }
+
+        $page++;
     }
 
-    $ch = curl_init();
-    curl_setopt($ch, CURLOPT_URL, $url);
-    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
-    curl_setopt($ch, CURLOPT_HTTPHEADER, [
-        'Accept: application/json',
-        'Authorization: Bearer ' . $token
-    ]);
-    curl_setopt($ch, CURLOPT_TIMEOUT, 60);
+    return $all;
+}
 
-    $response = curl_exec($ch);
-    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    $error = curl_error($ch);
-    curl_close($ch);
+/**
+ * Fetch ALL items from a Directus collection using offset pagination.
+ *
+ * @param string $directusUrl Base Directus URL
+ * @param string $token API token
+ * @param string $collection Collection name
+ * @param string $fields Comma-separated fields to fetch
+ * @return array All items
+ */
+function fetchAllDirectusItems($directusUrl, $token, $collection, $fields = '*')
+{
+    $baseUrl = rtrim($directusUrl, '/');
+    $perPage = 500;
+    $offset = 0;
+    $all = [];
 
-    if ($httpCode !== 200 || !$response) {
-        throw new Exception("Failed to fetch biblios from Koha API (HTTP {$httpCode}): {$error}");
+    while (true) {
+        $url = "{$baseUrl}/items/{$collection}?limit={$perPage}&offset={$offset}&fields={$fields}";
+
+        $ch = curl_init($url);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_HTTPHEADER, [
+            'Authorization: Bearer ' . $token,
+            'Content-Type: application/json'
+        ]);
+
+        $response = curl_exec($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        if ($httpCode !== 200) {
+            throw new Exception("Failed to fetch Directus items at offset {$offset} (HTTP {$httpCode}): {$response}");
+        }
+
+        $data = json_decode($response, true);
+        $items = $data['data'] ?? [];
+        $all = array_merge($all, $items);
+
+        echo "  Offset {$offset}: " . count($items) . " items (total so far: " . count($all) . ")\n";
+
+        if (count($items) < $perPage) {
+            break;
+        }
+
+        $offset += $perPage;
     }
 
-    $biblios = json_decode($response, true);
-
-    if (!is_array($biblios)) {
-        throw new Exception("Invalid API response: expected array of biblios");
-    }
-
-    return $biblios;
+    return $all;
 }
 
 /**
@@ -225,12 +290,11 @@ function main()
 
         echo "✅ OAuth token obtained\n\n";
 
-        // Step 2: Fetch biblios from Koha API
-        echo "🔄 Step 2/5: Fetching 100 biblios from Koha API...\n";
+        // Step 2: Fetch ALL biblios from Koha API (paginated)
+        echo "🔄 Step 2/5: Fetching all biblios from Koha API (paginated)...\n";
         $kohaBiblios = fetchKohaBiblios(
             $config['API_BASE_URL'],
             $kohaToken,
-            100,
             $verbose
         );
 
@@ -255,22 +319,26 @@ function main()
             );
         }
 
-        $existingData = $directusClient->getItems($collectionName, [], 10000);
-        $existingBiblios = $existingData['data'] ?? [];
+        $existingBiblios = fetchAllDirectusItems(
+            $config['DIRECTUS_API_URL'],
+            $config['DIRECTUS_API_TOKEN'],
+            $collectionName,
+            'id,biblio_id,status'
+        );
         $stats['directus_before'] = count($existingBiblios);
 
         echo "✅ Found {$stats['directus_before']} existing biblios in Directus\n\n";
 
-        // Build lookup maps
+        // Build lookup maps (use hash maps for O(1) lookup instead of O(n) in_array)
         $existingById = [];
         foreach ($existingBiblios as $biblio) {
             $existingById[$biblio['biblio_id']] = $biblio;
         }
 
-        // Collect all Koha IDs
+        // Collect all Koha IDs as hash map for fast soft-delete check
         $kohaIds = [];
         foreach ($kohaBiblios as $kohaBook) {
-            $kohaIds[] = $kohaBook['biblio_id'];
+            $kohaIds[$kohaBook['biblio_id']] = true;
         }
 
         // Step 4: Sync biblios (create/update)
@@ -321,7 +389,7 @@ function main()
             $directusId = $existing['id'];
 
             // If biblio no longer exists in Koha and is currently active
-            if (!in_array($biblioId, $kohaIds) && $existing['status'] === 'active') {
+            if (!isset($kohaIds[$biblioId]) && $existing['status'] === 'active') {
                 try {
                     // Use Directus id, not biblio_id!
                     $directusClient->updateItem($collectionName, $directusId, [
