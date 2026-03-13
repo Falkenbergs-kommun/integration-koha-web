@@ -108,6 +108,44 @@ The final JSON includes 20+ metadata fields per book including ISBN, title, auth
 - Failed downloads return null, not errors
 - images/ directory is auto-created with 0755 permissions
 
+## Koha → Directus Sync (directus/)
+
+### Sync Scripts
+
+- **`sync_koha_to_directus.php`** – Daglig cron-synk (körs via `sync_cron.sh` kl 03:00). Hämtar alla biblios från Koha API, synkar mot `kft_koha_biblios` i Directus med soft-delete-strategi.
+- **`sync_koha_to_directus_full.php`** – Engångsskript för fullständig katalogsynk med batchstöd och `--start-from`-parameter.
+- **`DirectusClient.php`** – PHP-klient för Directus REST API (CRUD + bulk-delete).
+- **`cleanup_duplicates.php`** – Rensar dubbletter i `kft_koha_biblios`. Kör med `--dry-run` för förhandsvisning.
+
+### Synklogik (sync_koha_to_directus.php)
+
+1. Hämtar alla Koha-biblios via paginerad API (500/sida, sortering `-biblio_id`)
+2. Hämtar alla Directus-poster via paginerad offset (`sort=id ASC` – kritiskt för stabilitet)
+3. Bygger lookup-map `biblio_id → Directus-id`; dubbletter samlas för radering
+4. Uppdaterar befintliga / skapar nya poster
+5. Raderar ev. dubbletter (steg 4b)
+6. Markerar poster som `inactive` om biblio_id försvunnit från Koha
+
+### Viktiga designbeslut
+
+- **`image_cached` och `image_cached_url` skrivs INTE av synken** – dessa fält ägs av webbendpointsen (`common.php`, `latest.php`) som cachar bilder lokalt. Synken skriver dem aldrig, annars nollas cachade bilder varje natt.
+- **Soft delete** – poster som försvinner från Koha markeras `status=inactive`, raderas inte.
+- **`sort=id` i Directus-paginering** – utan explicit sortering är offset-pagination instabil och kan missa poster vid stora kataloger.
+
+### Felsökning dubbletter
+
+```bash
+# Kontrollera om dubbletter finns
+php directus/cleanup_duplicates.php --dry-run
+
+# Rensa dubbletter
+php directus/cleanup_duplicates.php
+
+# Kontrollera antal poster via API
+curl -H "Authorization: Bearer TOKEN" \
+  "https://nav.utvecklingfalkenberg.se/items/kft_koha_biblios?aggregate[count]=id"
+```
+
 ## AI Enrichment & Directus Integration
 
 ### Enriched Metadata Collection

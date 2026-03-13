@@ -45,10 +45,8 @@ function transformKohaToDirectus($kohaBook)
     // Extract first ISBN
     $firstIsbn = getFirstIsbn($kohaBook['isbn'] ?? null);
 
-    // Generate image URLs
+    // Generate Syndetics image URL from ISBN
     $imageUrl = getImageUrl($firstIsbn);
-    $imageCached = null;
-    $imageCachedUrl = null;
 
     // Build catalog link
     $catalogLink = 'https://bibliotekskatalog.falkenberg.se/cgi-bin/koha/opac-detail.pl?biblionumber=' . $kohaBook['biblio_id'];
@@ -96,10 +94,12 @@ function transformKohaToDirectus($kohaBook)
         'url' => safeTruncate($kohaBook['url'] ?? null, 1000),
         'catalog_link' => safeTruncate($catalogLink, 500),
 
-        // Image fields (URLs only, no file upload)
+        // Image URL from Syndetics (derived from ISBN)
         'image_url' => safeTruncate($imageUrl, 1000),
-        'image_cached' => safeTruncate($imageCached, 500),
-        'image_cached_url' => safeTruncate($imageCachedUrl, 1000),
+        // NOTE: image_cached and image_cached_url are intentionally excluded here.
+        // They are populated by the web endpoints (common.php/latest.php) when images
+        // are downloaded and cached locally. Overwriting them with null on every sync
+        // would destroy cached image references.
 
         // Raw data for future use
         'raw_data' => $kohaBook,
@@ -188,7 +188,7 @@ function fetchAllDirectusItems($directusUrl, $token, $collection, $fields = '*')
     $all = [];
 
     while (true) {
-        $url = "{$baseUrl}/items/{$collection}?limit={$perPage}&offset={$offset}&fields={$fields}";
+        $url = "{$baseUrl}/items/{$collection}?limit={$perPage}&offset={$offset}&fields={$fields}&sort=id";
 
         $ch = curl_init($url);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
@@ -247,6 +247,7 @@ function main()
         'created' => 0,
         'updated' => 0,
         'marked_inactive' => 0,
+        'duplicates_deleted' => 0,
         'errors' => []
     ];
 
@@ -330,9 +331,24 @@ function main()
         echo "✅ Found {$stats['directus_before']} existing biblios in Directus\n\n";
 
         // Build lookup maps (use hash maps for O(1) lookup instead of O(n) in_array)
+        // Results arrive sorted by id ASC, so when a biblio_id appears twice the second
+        // entry has a higher id (= most recently synced). Collect the lower-id duplicates
+        // for deletion so they don't silently accumulate across syncs.
         $existingById = [];
+        $duplicateIdsToDelete = [];
+
         foreach ($existingBiblios as $biblio) {
-            $existingById[$biblio['biblio_id']] = $biblio;
+            $biblioId = $biblio['biblio_id'];
+            if (isset($existingById[$biblioId])) {
+                // Already seen this biblio_id – the stored entry has a lower id.
+                // Keep the higher-id record (this one) and schedule the lower-id for deletion.
+                $duplicateIdsToDelete[] = $existingById[$biblioId]['id'];
+            }
+            $existingById[$biblioId] = $biblio;
+        }
+
+        if (count($duplicateIdsToDelete) > 0) {
+            echo "  ⚠️  Found " . count($duplicateIdsToDelete) . " duplicate records – will clean up after sync\n";
         }
 
         // Collect all Koha IDs as hash map for fast soft-delete check
@@ -381,10 +397,42 @@ function main()
 
         echo "✅ Synchronization complete\n\n";
 
+        // Step 4b: Delete duplicate records collected during map-build
+        if (count($duplicateIdsToDelete) > 0) {
+            echo "🔄 Step 4b: Deleting " . count($duplicateIdsToDelete) . " duplicate records...\n";
+            $deleteBatches = array_chunk($duplicateIdsToDelete, 200);
+            $deletedCount = 0;
+
+            foreach ($deleteBatches as $batchNum => $batch) {
+                try {
+                    $directusClient->deleteItems($collectionName, $batch);
+                    $deletedCount += count($batch);
+                    echo "  Deleted batch " . ($batchNum + 1) . "/" . count($deleteBatches)
+                         . " (" . $deletedCount . "/" . count($duplicateIdsToDelete) . " total)\n";
+                } catch (Exception $e) {
+                    $error = "Failed to delete duplicate batch " . ($batchNum + 1) . ": " . $e->getMessage();
+                    $stats['errors'][] = $error;
+                    if ($verbose) {
+                        echo "  ❌ {$error}\n";
+                    }
+                }
+            }
+
+            $stats['duplicates_deleted'] = $deletedCount;
+            echo "✅ Duplicate cleanup complete\n\n";
+        }
+
         // Step 5: Mark inactive (soft delete) for biblios no longer in Koha
         echo "🔄 Step 5/5: Marking inactive biblios...\n";
 
+        // Skip records that were already hard-deleted in step 4b
+        $deletedIdSet = array_flip($duplicateIdsToDelete);
+
         foreach ($existingBiblios as $existing) {
+            if (isset($deletedIdSet[$existing['id']])) {
+                continue;
+            }
+
             $biblioId = $existing['biblio_id'];
             $directusId = $existing['id'];
 
@@ -434,10 +482,11 @@ function main()
     echo "✅ Created:                   {$stats['created']}\n";
     echo "🔄 Updated:                   {$stats['updated']}\n";
     echo "⏸️  Marked inactive:           {$stats['marked_inactive']}\n";
+    echo "🧹 Duplicates deleted:        {$stats['duplicates_deleted']}\n";
     echo "❌ Errors:                    " . count($stats['errors']) . "\n";
     echo "───────────────────────────────────────────────────────────\n";
 
-    $totalActive = $stats['directus_before'] + $stats['created'] - $stats['marked_inactive'];
+    $totalActive = $stats['directus_before'] + $stats['created'] - $stats['marked_inactive'] - $stats['duplicates_deleted'];
     echo "📚 Total in Directus now:     {$totalActive}\n";
     echo "⏱️  Duration:                  " . number_format($duration, 2) . "s\n";
     echo "\n";

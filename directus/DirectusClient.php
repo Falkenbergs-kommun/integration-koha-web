@@ -391,6 +391,47 @@ class DirectusClient
     }
 
     /**
+     * DELETE - Bulk delete items from a collection
+     *
+     * @param string $collection Collection name
+     * @param array $ids Array of Directus item IDs to delete
+     * @return bool True on success
+     * @throws Exception if request fails
+     */
+    public function deleteItems($collection, array $ids)
+    {
+        $url = "{$this->baseUrl}/items/{$collection}";
+
+        if ($this->verbose) {
+            $this->log("   DELETE: {$url} (" . count($ids) . " items)");
+        }
+
+        $ch = curl_init($url);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_CUSTOMREQUEST, 'DELETE');
+        curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode(['keys' => $ids]));
+        curl_setopt($ch, CURLOPT_HTTPHEADER, [
+            'Content-Type: application/json',
+            'Authorization: Bearer ' . $this->token
+        ]);
+
+        $response = curl_exec($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $error = curl_error($ch);
+        curl_close($ch);
+
+        if ($error) {
+            throw new Exception("Directus DELETE request failed: {$error}");
+        }
+
+        if ($httpCode !== 200 && $httpCode !== 204) {
+            throw new Exception("Directus DELETE failed (HTTP {$httpCode}): {$response}");
+        }
+
+        return true;
+    }
+
+    /**
      * Delete a collection
      *
      * @param string $collection Collection name to delete
