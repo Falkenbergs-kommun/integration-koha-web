@@ -113,9 +113,11 @@ The final JSON includes 20+ metadata fields per book including ISBN, title, auth
 ### Sync Scripts
 
 - **`sync_koha_to_directus.php`** – Daglig cron-synk (körs via `sync_cron.sh` kl 03:00). Hämtar alla biblios från Koha API, synkar mot `kft_koha_biblios` i Directus med soft-delete-strategi.
-- **`sync_koha_to_directus_full.php`** – Engångsskript för fullständig katalogsynk med batchstöd och `--start-from`-parameter.
-- **`DirectusClient.php`** – PHP-klient för Directus REST API (CRUD + bulk-delete).
+- **`sync_koha_branches.php`** – Synkar ~11 filialer från Koha `/libraries` till `kft_koha_branches`. Snabb, ingen paginering.
+- **`sync_koha_items.php`** – Synkar ~155k exemplar från Koha `/items` till `kft_koha_items`. Streaming-arkitektur med cursor-paginering (`q={"item_id":{">":<id>}}`), automatisk OAuth-tokenförnyelse var 45:e minut, och fallback vid korrupta poster. Stöder `--start-from=N` och `--verbose`.
+- **`DirectusClient.php`** – PHP-klient för Directus REST API (CRUD + bulk-create/delete).
 - **`cleanup_duplicates.php`** – Rensar dubbletter i `kft_koha_biblios`. Kör med `--dry-run` för förhandsvisning.
+- **`sync_cron.sh`** – Kör alla tre syncar i sekvens: Branches → Biblios → Items (dagligen kl 03:00).
 
 ### Synklogik (sync_koha_to_directus.php)
 
@@ -128,6 +130,10 @@ The final JSON includes 20+ metadata fields per book including ISBN, title, auth
 
 ### Viktiga designbeslut
 
+- **Koha API har korrupta poster** – Vissa items har ogiltiga datumfält (`replacement_price_date` med "Month out of range") som ger HTTP 500. `sync_koha_items.php` hanterar detta med fallback: 500 → 10 → hoppa förbi.
+- **OAuth-tokens löper ut efter ~1h** – Items-synken tar ~2.5h, så token förnyas automatiskt var 45:e minut. Koha returnerar tom array (inte felkod) vid utgången token – tyst fel.
+- **`--start-from` hoppar över soft-delete** – Vid partiell sync kan man inte avgöra vilka poster som saknas i källan, så inactive-markering skippas.
+- **`safeTruncate()` i `common.php`** – Delad multibyte-safe trunkering, används av alla sync-scripts.
 - **`image_cached` och `image_cached_url` skrivs INTE av synken** – dessa fält ägs av webbendpointsen (`common.php`, `latest.php`) som cachar bilder lokalt. Synken skriver dem aldrig, annars nollas cachade bilder varje natt.
 - **Soft delete** – poster som försvinner från Koha markeras `status=inactive`, raderas inte.
 - **`sort=id` i Directus-paginering** – utan explicit sortering är offset-pagination instabil och kan missa poster vid stora kataloger.

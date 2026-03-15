@@ -2,22 +2,28 @@
 ###############################################################################
 # Koha → Directus Sync - Cron Wrapper Script
 #
-# This script is designed to be run by cron for automated daily synchronization
-# of Koha biblios to Directus. It handles logging and error reporting.
+# Runs all three syncs in sequence:
+# 1. Branches (libraries) - fast, reference data
+# 2. Biblios (books) - medium, ~70k records
+# 3. Items (exemplar) - large, ~155k records
 #
 # Crontab entry (daily at 03:00):
 # 0 3 * * * /home/httpd/fbg-intranet/integrationer/integration-koha-web/directus/sync_cron.sh
 #
 # @package    Falkenbergs kommun
-# @subpackage Koha Biblios Sync
+# @subpackage Koha Sync
 ###############################################################################
 
 # Configuration
 SCRIPT_DIR="/home/httpd/fbg-intranet/integrationer/integration-koha-web/directus"
-SYNC_SCRIPT="${SCRIPT_DIR}/sync_koha_to_directus.php"
 LOG_FILE="${SCRIPT_DIR}/sync.log"
 ERROR_LOG="${SCRIPT_DIR}/sync_errors.log"
 MAX_LOG_SIZE=10485760  # 10MB
+
+# Sync scripts in execution order
+SYNC_BRANCHES="${SCRIPT_DIR}/sync_koha_branches.php"
+SYNC_BIBLIOS="${SCRIPT_DIR}/sync_koha_to_directus.php"
+SYNC_ITEMS="${SCRIPT_DIR}/sync_koha_items.php"
 
 # Get current timestamp
 TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S')
@@ -37,6 +43,29 @@ rotate_log_if_needed() {
     fi
 }
 
+# Function to run a sync step
+run_sync() {
+    local name=$1
+    local script=$2
+    local step_timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+
+    echo "[$step_timestamp] Starting sync: ${name}..." >> "$LOG_FILE"
+
+    if [ ! -f "$script" ]; then
+        echo "[$step_timestamp] WARNING: Script not found: ${script}, skipping" >> "$LOG_FILE"
+        return 0
+    fi
+
+    if php "$script" >> "$LOG_FILE" 2>&1; then
+        echo "[$step_timestamp] ${name}: SUCCESS" >> "$LOG_FILE"
+        return 0
+    else
+        echo "[$step_timestamp] ${name}: FAILED" >> "$LOG_FILE"
+        echo "[$step_timestamp] ERROR: ${name} sync failed! Check ${LOG_FILE} for details." >> "$ERROR_LOG"
+        return 1
+    fi
+}
+
 # Rotate logs if needed
 rotate_log_if_needed "$LOG_FILE"
 rotate_log_if_needed "$ERROR_LOG"
@@ -44,7 +73,7 @@ rotate_log_if_needed "$ERROR_LOG"
 # Log start
 echo "" >> "$LOG_FILE"
 echo "========================================" >> "$LOG_FILE"
-echo "[$TIMESTAMP] Starting Koha → Directus sync..." >> "$LOG_FILE"
+echo "[$TIMESTAMP] Starting Koha -> Directus full sync..." >> "$LOG_FILE"
 echo "========================================" >> "$LOG_FILE"
 
 # Change to script directory
@@ -53,23 +82,26 @@ cd "$SCRIPT_DIR" || {
     exit 1
 }
 
-# Run sync script and capture output
-if php "$SYNC_SCRIPT" >> "$LOG_FILE" 2>&1; then
-    SYNC_RESULT="SUCCESS"
-    echo "[$TIMESTAMP] Sync completed successfully." >> "$LOG_FILE"
-else
-    SYNC_RESULT="FAILED"
-    echo "[$TIMESTAMP] ERROR: Sync failed! Check logs for details." >> "$ERROR_LOG"
-    echo "[$TIMESTAMP] ERROR: Sync failed! See $ERROR_LOG" >> "$LOG_FILE"
-fi
+# Track overall result
+OVERALL_RESULT="SUCCESS"
+
+# Step 1: Branches (fast, reference data - must run first)
+run_sync "Branches" "$SYNC_BRANCHES" || OVERALL_RESULT="PARTIAL_FAILURE"
+
+# Step 2: Biblios
+run_sync "Biblios" "$SYNC_BIBLIOS" || OVERALL_RESULT="PARTIAL_FAILURE"
+
+# Step 3: Items (largest sync, depends on branches)
+run_sync "Items" "$SYNC_ITEMS" || OVERALL_RESULT="PARTIAL_FAILURE"
 
 # Log completion
-echo "[$TIMESTAMP] Sync result: $SYNC_RESULT" >> "$LOG_FILE"
+FINISH_TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S')
+echo "[$FINISH_TIMESTAMP] Full sync result: $OVERALL_RESULT" >> "$LOG_FILE"
 echo "========================================" >> "$LOG_FILE"
 echo "" >> "$LOG_FILE"
 
 # Exit with appropriate code
-if [ "$SYNC_RESULT" = "SUCCESS" ]; then
+if [ "$OVERALL_RESULT" = "SUCCESS" ]; then
     exit 0
 else
     exit 1

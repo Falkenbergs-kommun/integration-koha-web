@@ -470,6 +470,127 @@ class DirectusClient
     }
 
     /**
+     * POST - Bulk create items in a collection
+     *
+     * Directus supports bulk-create by sending an array to POST /items/{collection}.
+     * Items are sent in batches to avoid request size limits.
+     *
+     * @param string $collection Collection name
+     * @param array $items Array of item data arrays
+     * @param int $batchSize Items per request (default 100)
+     * @return int Number of successfully created items
+     * @throws Exception if a batch request fails
+     */
+    public function createItems($collection, array $items, $batchSize = 100)
+    {
+        $url = "{$this->baseUrl}/items/{$collection}";
+        $created = 0;
+        $batches = array_chunk($items, $batchSize);
+
+        foreach ($batches as $batchIndex => $batch) {
+            if ($this->verbose) {
+                $this->log("   POST bulk: {$url} (batch " . ($batchIndex + 1) . "/" . count($batches) . ", " . count($batch) . " items)");
+            }
+
+            $ch = curl_init($url);
+            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($ch, CURLOPT_POST, true);
+            curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($batch));
+            curl_setopt($ch, CURLOPT_HTTPHEADER, [
+                'Content-Type: application/json',
+                'Authorization: Bearer ' . $this->token
+            ]);
+            curl_setopt($ch, CURLOPT_TIMEOUT, 120);
+
+            $response = curl_exec($ch);
+            $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            $error = curl_error($ch);
+            curl_close($ch);
+
+            if ($error) {
+                throw new Exception("Directus bulk POST failed: {$error}");
+            }
+
+            if ($httpCode !== 200 && $httpCode !== 204) {
+                throw new Exception("Directus bulk POST failed (HTTP {$httpCode}): {$response}");
+            }
+
+            $created += count($batch);
+        }
+
+        return $created;
+    }
+
+    /**
+     * PATCH - Bulk update items in a collection
+     *
+     * Directus supports bulk-update by sending an array of objects with 'id' key
+     * to PATCH /items/{collection}.
+     *
+     * @param string $collection Collection name
+     * @param array $items Array of item data arrays (each must include 'id' key)
+     * @param int $batchSize Items per request (default 100)
+     * @return int Number of successfully updated items
+     * @throws Exception if a batch request fails
+     */
+    public function updateItems($collection, array $items, $batchSize = 100)
+    {
+        $url = "{$this->baseUrl}/items/{$collection}";
+        $updated = 0;
+        $batches = array_chunk($items, $batchSize);
+
+        foreach ($batches as $batchIndex => $batch) {
+            // Extract IDs and data for Directus bulk update format
+            $ids = array_map(function ($item) { return $item['id']; }, $batch);
+            // Remove 'id' from data since it's passed separately
+            $data = $batch[0];
+            unset($data['id']);
+
+            // Directus bulk PATCH: PATCH /items/{collection} with body { keys: [...], data: {...} }
+            // But for heterogeneous updates, we need individual calls
+            // For homogeneous updates (same data), we can use keys+data format
+
+            if ($this->verbose) {
+                $this->log("   PATCH bulk: {$url} (batch " . ($batchIndex + 1) . "/" . count($batches) . ", " . count($batch) . " items)");
+            }
+
+            // For heterogeneous data, use individual updates
+            foreach ($batch as $item) {
+                $id = $item['id'];
+                $itemData = $item;
+                unset($itemData['id']);
+
+                $itemUrl = "{$url}/{$id}";
+                $ch = curl_init($itemUrl);
+                curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+                curl_setopt($ch, CURLOPT_CUSTOMREQUEST, 'PATCH');
+                curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($itemData));
+                curl_setopt($ch, CURLOPT_HTTPHEADER, [
+                    'Content-Type: application/json',
+                    'Authorization: Bearer ' . $this->token
+                ]);
+
+                $response = curl_exec($ch);
+                $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+                $error = curl_error($ch);
+                curl_close($ch);
+
+                if ($error) {
+                    throw new Exception("Directus PATCH failed for id {$id}: {$error}");
+                }
+
+                if ($httpCode !== 200 && $httpCode !== 204) {
+                    throw new Exception("Directus PATCH failed for id {$id} (HTTP {$httpCode}): {$response}");
+                }
+
+                $updated++;
+            }
+        }
+
+        return $updated;
+    }
+
+    /**
      * Log message to console
      *
      * @param string $message Message to log

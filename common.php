@@ -440,6 +440,25 @@ function getItemTypesFromApi($apiBaseUrl, $apiToken) {
  * @param int $limit Max antal biblios att returnera
  * @return array Lista med biblio-objekt i samma format som GET /biblios
  */
+/**
+ * Safely truncate string to max length (multibyte-safe)
+ *
+ * @param mixed $value Value to truncate
+ * @param int $maxLength Maximum allowed length
+ * @return string|null Truncated string or null
+ */
+function safeTruncate($value, $maxLength)
+{
+    if ($value === null) {
+        return null;
+    }
+    $value = (string)$value;
+    if (mb_strlen($value) > $maxLength) {
+        return mb_substr($value, 0, $maxLength);
+    }
+    return $value;
+}
+
 function getFilteredBibliosFromItems($apiBaseUrl, $apiToken, $itemTypes = [], $limit = 10) {
     // Bygg URL - API-endpoint för items
     // API_BASE_URL pekar till /biblios/, men items är på samma nivå

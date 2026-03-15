@@ -6,7 +6,7 @@
  * This script fetches books from Koha API and synchronizes them
  * to Directus using soft delete strategy (inactive instead of delete).
  *
- * Usage: php sync_koha_to_directus.php [-v|--verbose]
+ * Usage: php sync_koha_to_directus.php [-v|--verbose] [--force-update]
  *
  * @package    Falkenbergs kommun
  * @subpackage Koha Biblios Sync
@@ -19,20 +19,7 @@ ini_set('display_errors', 1);
 require_once __DIR__ . '/../common.php';
 require_once __DIR__ . '/DirectusClient.php';
 
-/**
- * Safely truncate string to max length
- */
-function safeTruncate($value, $maxLength)
-{
-    if ($value === null) {
-        return null;
-    }
-    $value = (string)$value;
-    if (mb_strlen($value) > $maxLength) {
-        return mb_substr($value, 0, $maxLength);
-    }
-    return $value;
-}
+// safeTruncate() is now in common.php
 
 /**
  * Transform Koha API data to Directus format
@@ -226,9 +213,10 @@ function fetchAllDirectusItems($directusUrl, $token, $collection, $fields = '*')
  */
 function main()
 {
-    // Check for verbose flag
+    // Check for flags
     global $argv;
     $verbose = in_array('-v', $argv) || in_array('--verbose', $argv);
+    $forceUpdate = in_array('--force-update', $argv);
 
     echo "\n";
     echo "╔════════════════════════════════════════════════════════════╗\n";
@@ -237,8 +225,12 @@ function main()
     echo "\n";
 
     if ($verbose) {
-        echo "ℹ️  Verbose mode enabled\n\n";
+        echo "Verbose mode enabled\n";
     }
+    if ($forceUpdate) {
+        echo "Force update: will update ALL biblios regardless of timestamp\n";
+    }
+    echo "\n";
 
     $startTime = microtime(true);
     $stats = [
@@ -246,6 +238,7 @@ function main()
         'directus_before' => 0,
         'created' => 0,
         'updated' => 0,
+        'skipped' => 0,
         'marked_inactive' => 0,
         'duplicates_deleted' => 0,
         'errors' => []
@@ -324,7 +317,7 @@ function main()
             $config['DIRECTUS_API_URL'],
             $config['DIRECTUS_API_TOKEN'],
             $collectionName,
-            'id,biblio_id,status'
+            'id,biblio_id,status,koha_timestamp'
         );
         $stats['directus_before'] = count($existingBiblios);
 
@@ -369,11 +362,25 @@ function main()
             }
 
             try {
-                // Transform data
-                $directusData = transformKohaToDirectus($kohaBook);
-
                 // Check if already exists
                 $existing = $existingById[$biblioId] ?? null;
+
+                if ($existing && !$forceUpdate) {
+                    // Skip update if koha_timestamp hasn't changed
+                    // Formats differ: Koha uses +01:00, Directus uses .000Z (UTC)
+                    // Compare as unix timestamps to normalize
+                    $kohaTs = $kohaBook['timestamp'] ?? null;
+                    $directusTs = $existing['koha_timestamp'] ?? null;
+
+                    if ($kohaTs !== null && $directusTs !== null
+                        && strtotime($kohaTs) === strtotime($directusTs)) {
+                        $stats['skipped']++;
+                        continue;
+                    }
+                }
+
+                // Transform data
+                $directusData = transformKohaToDirectus($kohaBook);
 
                 if ($existing) {
                     // Update existing - use Directus id, not biblio_id!
@@ -479,9 +486,10 @@ function main()
     echo "📊 Koha biblios:              {$stats['koha_total']}\n";
     echo "📊 Directus before sync:      {$stats['directus_before']}\n";
     echo "───────────────────────────────────────────────────────────\n";
-    echo "✅ Created:                   {$stats['created']}\n";
-    echo "🔄 Updated:                   {$stats['updated']}\n";
-    echo "⏸️  Marked inactive:           {$stats['marked_inactive']}\n";
+    echo "Created:                   {$stats['created']}\n";
+    echo "Updated:                   {$stats['updated']}\n";
+    echo "Skipped (unchanged):       {$stats['skipped']}\n";
+    echo "Marked inactive:           {$stats['marked_inactive']}\n";
     echo "🧹 Duplicates deleted:        {$stats['duplicates_deleted']}\n";
     echo "❌ Errors:                    " . count($stats['errors']) . "\n";
     echo "───────────────────────────────────────────────────────────\n";
