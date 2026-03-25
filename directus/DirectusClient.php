@@ -30,6 +30,26 @@ class DirectusClient
     }
 
     /**
+     * Get base URL (for custom queries outside standard CRUD)
+     *
+     * @return string
+     */
+    public function getBaseUrl()
+    {
+        return $this->baseUrl;
+    }
+
+    /**
+     * Get API token (for custom queries outside standard CRUD)
+     *
+     * @return string
+     */
+    public function getToken()
+    {
+        return $this->token;
+    }
+
+    /**
      * GET - Fetch items from a collection
      *
      * @param string $collection Collection name

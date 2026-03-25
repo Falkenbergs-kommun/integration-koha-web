@@ -122,7 +122,7 @@ The final JSON includes 20+ metadata fields per book including ISBN, title, auth
 - **`sync_koha_to_directus.php`** – Daglig cron-synk (körs via `sync_cron.sh` kl 03:00). Hämtar alla biblios från Koha API, synkar mot `kft_koha_biblios` i Directus med soft-delete-strategi.
 - **`sync_koha_branches.php`** – Synkar ~11 filialer från Koha `/libraries` till `kft_koha_branches`. Snabb, ingen paginering.
 - **`sync_koha_items.php`** – Synkar ~155k exemplar från Koha `/items` till `kft_koha_items`. Streaming-arkitektur med cursor-paginering (`q={"item_id":{">":<id>}}`), automatisk OAuth-tokenförnyelse var 45:e minut, och fallback vid korrupta poster. Stöder `--start-from=N` och `--verbose`.
-- **`DirectusClient.php`** – PHP-klient för Directus REST API (CRUD + bulk-create/delete).
+- **`DirectusClient.php`** – PHP-klient för Directus REST API (CRUD + bulk-create/delete). Exponerar `getBaseUrl()` och `getToken()` för custom-queries utanför standard-CRUD.
 - **`cleanup_duplicates.php`** – Rensar dubbletter i `kft_koha_biblios`. Kör med `--dry-run` för förhandsvisning.
 - **`sync_cron.sh`** – Kör alla syncar i sekvens: Branches → Biblios → Items → Holds → Qdrant vectors (dagligen kl 03:00).
 - **`prepare_embedding_text.php`** – Aggregerar data från alla 4 Directus-kollektioner och bygger strukturerad embedding-text + metadata per biblio. Stöder `--output=json|jsonl|csv`, `--limit=N`, `--biblio-id=N`.
