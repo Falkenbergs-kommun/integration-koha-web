@@ -2,10 +2,12 @@
 ###############################################################################
 # Koha → Directus Sync - Cron Wrapper Script
 #
-# Runs all three syncs in sequence:
+# Runs all syncs in sequence:
 # 1. Branches (libraries) - fast, reference data
 # 2. Biblios (books) - medium, ~70k records
 # 3. Items (exemplar) - large, ~155k records
+# 4. Holds (reservations) - fast, ~1900 holds aggregated to ~1140 biblios
+# 5. Qdrant vectors - hybrid search embeddings (dense + sparse)
 #
 # Crontab entry (daily at 03:00):
 # 0 3 * * * /home/httpd/fbg-intranet/integrationer/integration-koha-web/directus/sync_cron.sh
@@ -24,6 +26,7 @@ MAX_LOG_SIZE=10485760  # 10MB
 SYNC_BRANCHES="${SCRIPT_DIR}/sync_koha_branches.php"
 SYNC_BIBLIOS="${SCRIPT_DIR}/sync_koha_to_directus.php"
 SYNC_ITEMS="${SCRIPT_DIR}/sync_koha_items.php"
+SYNC_HOLDS="${SCRIPT_DIR}/sync_koha_holds.php"
 
 # Get current timestamp
 TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S')
@@ -93,6 +96,24 @@ run_sync "Biblios" "$SYNC_BIBLIOS" || OVERALL_RESULT="PARTIAL_FAILURE"
 
 # Step 3: Items (largest sync, depends on branches)
 run_sync "Items" "$SYNC_ITEMS" || OVERALL_RESULT="PARTIAL_FAILURE"
+
+# Step 4: Holds (aggregated reservations, depends on items + biblios)
+run_sync "Holds" "$SYNC_HOLDS" || OVERALL_RESULT="PARTIAL_FAILURE"
+
+# Step 5: Qdrant vector sync (depends on all previous data being current)
+QDRANT_DIR="/home/httpd/fbg-intranet/integrationer/integration-koha-web/qdrant"
+if [ -d "$QDRANT_DIR" ]; then
+    STEP_TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S')
+    echo "[$STEP_TIMESTAMP] Starting sync: Qdrant vectors..." >> "$LOG_FILE"
+    if cd "$QDRANT_DIR" && uv run sync_to_qdrant.py >> "$LOG_FILE" 2>&1; then
+        echo "[$STEP_TIMESTAMP] Qdrant vectors: SUCCESS" >> "$LOG_FILE"
+    else
+        echo "[$STEP_TIMESTAMP] Qdrant vectors: FAILED" >> "$LOG_FILE"
+        echo "[$STEP_TIMESTAMP] ERROR: Qdrant sync failed! Check ${LOG_FILE} for details." >> "$ERROR_LOG"
+        OVERALL_RESULT="PARTIAL_FAILURE"
+    fi
+    cd "$SCRIPT_DIR"
+fi
 
 # Log completion
 FINISH_TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S')

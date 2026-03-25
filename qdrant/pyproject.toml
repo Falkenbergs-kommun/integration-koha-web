@@ -1,0 +1,13 @@
+[project]
+name = "koha-qdrant-sync"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = [
+    "openai>=1.0",
+    "qdrant-client>=1.12",
+    "fastembed>=0.3",
+    "python-dotenv",
+]
+
+[project.scripts]
+sync-qdrant = "sync_to_qdrant:main"

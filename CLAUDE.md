@@ -60,6 +60,13 @@ Required `.env` variables:
 **Google Gemini AI (for metadata enrichment):**
 - `GEMINI_API_KEY` - Google Gemini API key from https://aistudio.google.com/app/apikey
 
+**Qdrant Vector Database (for hybrid search):**
+- `QDRANT_URL` - Qdrant instance URL (e.g., https://qdrant.utvecklingfalkenberg.se)
+- `QDRANT_API_KEY` - Qdrant API key for authentication
+
+**OpenAI (for embeddings):**
+- `OPENAI_API_KEY` - OpenAI API key for text-embedding-3-large
+
 See `.env.example` for template and `docs/GEMINI_ENRICHMENT.md` for detailed setup guide.
 
 ## Caching Strategy
@@ -117,7 +124,8 @@ The final JSON includes 20+ metadata fields per book including ISBN, title, auth
 - **`sync_koha_items.php`** – Synkar ~155k exemplar från Koha `/items` till `kft_koha_items`. Streaming-arkitektur med cursor-paginering (`q={"item_id":{">":<id>}}`), automatisk OAuth-tokenförnyelse var 45:e minut, och fallback vid korrupta poster. Stöder `--start-from=N` och `--verbose`.
 - **`DirectusClient.php`** – PHP-klient för Directus REST API (CRUD + bulk-create/delete).
 - **`cleanup_duplicates.php`** – Rensar dubbletter i `kft_koha_biblios`. Kör med `--dry-run` för förhandsvisning.
-- **`sync_cron.sh`** – Kör alla tre syncar i sekvens: Branches → Biblios → Items (dagligen kl 03:00).
+- **`sync_cron.sh`** – Kör alla syncar i sekvens: Branches → Biblios → Items → Holds → Qdrant vectors (dagligen kl 03:00).
+- **`prepare_embedding_text.php`** – Aggregerar data från alla 4 Directus-kollektioner och bygger strukturerad embedding-text + metadata per biblio. Stöder `--output=json|jsonl|csv`, `--limit=N`, `--biblio-id=N`.
 
 ### Synklogik (sync_koha_to_directus.php)
 
@@ -221,6 +229,55 @@ GET /items/kft_koha_enriched?aggregate[sum]=enrichment_cost_usd
 ```
 
 The enriched data can be integrated into existing endpoints (index.php, list.php, latest.php) by fetching from Directus API and merging with Koha metadata.
+
+## Qdrant Hybrid Search (qdrant/)
+
+### Overview
+
+The project includes a vector search pipeline that enables hybrid search (semantic + keyword) over the entire library catalog (~68k books). Data flows from Directus through PHP aggregation into Qdrant via Python embedding.
+
+### Collection: `koha-biblios`
+
+- **Dense vectors**: OpenAI `text-embedding-3-large` (3072 dims, cosine distance) — semantic search
+- **Sparse vectors**: BM25 via `fastembed` with `Qdrant/bm25` model (`Modifier.IDF`) — keyword matching
+- **Fusion**: Reciprocal Rank Fusion (RRF) combines both rankings at query time
+- **Payload indexes**: 12 filterable fields (biblio_id, title, author, isbn, publication_year, publisher, media_types, target_audience, subjects, tags, branches, series_title)
+
+### Sync Script
+
+**`qdrant/sync_to_qdrant.py`** – Python script (uv) that:
+1. Calls `prepare_embedding_text.php --output=jsonl` via subprocess to get aggregated data
+2. Compares SHA256 content hashes with existing Qdrant state (incremental sync)
+3. Generates dense embeddings (OpenAI API) + sparse embeddings (local BM25) for changed records
+4. Upserts to Qdrant with deterministic UUIDs (`uuid5("koha-biblio-{biblio_id}")`)
+5. Deletes entries for biblios no longer active in Directus
+
+**Usage:**
+```bash
+cd qdrant/
+uv run sync_to_qdrant.py                    # Full sync
+uv run sync_to_qdrant.py --dry-run          # Preview changes
+uv run sync_to_qdrant.py --force            # Re-embed all
+uv run sync_to_qdrant.py --limit=50 -v      # Test with 50 books
+```
+
+### Viktiga designbeslut
+
+- **PHP→Python bridge**: `prepare_embedding_text.php` är single source of truth för embedding-text och metadata. Python anropar den via subprocess och parsar JSONL.
+- **Inkrementell sync**: SHA256 av embedding-texten sparas som `content_hash` i Qdrant payload. Bara ändrade poster omgenereras (~$0.01-0.03/dag vs ~$0.73 för full sync).
+- **IPv4-workaround**: Qdrant-servern har AAAA-records men lyssnar inte på IPv6. Scriptet tvingar IPv4 via socket monkey-patch (samma som crawler-projektet).
+- **BM25 sparse vectors**: Genereras lokalt (ingen API-kostnad). IDF-viktning beräknas server-side av Qdrant.
+- **Cron**: Körs som steg 5 i `sync_cron.sh` (efter Branches → Biblios → Items → Holds).
+
+### Qdrant API
+
+```bash
+# Kontrollera collection
+curl -H "api-key: KEY" "https://qdrant.utvecklingfalkenberg.se/collections/koha-biblios"
+
+# Antal punkter
+curl -H "api-key: KEY" "https://qdrant.utvecklingfalkenberg.se/collections/koha-biblios" | jq '.result.points_count'
+```
 
 ## Code Style Conventions
 - Swedish comments and variable names (bibliotek domain language)
