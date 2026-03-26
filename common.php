@@ -62,8 +62,14 @@ function getOAuthToken($oauthUrl, $clientId, $clientSecret) {
     return null;
 }
 
-// Hämta series_title från MARC-post (fält 490$a)
-function getSeriesTitleFromMarc($biblioUrl, $apiToken) {
+// Trimma MARC-punktuation (avslutande ; , / .)
+function trimMarcPunctuation($str) {
+    return trim(rtrim(trim($str), ';,/.'));
+}
+
+// Hämta serieinfo från MARC 490 (subfields $a, $v, $x)
+// Returnerar array av objekt: [{"name": "...", "volume": "...", "issn": "..."}] eller null
+function getSeriesFromMarc($biblioUrl, $apiToken) {
     $ch = curl_init();
     curl_setopt($ch, CURLOPT_URL, $biblioUrl);
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
@@ -90,10 +96,19 @@ function getSeriesTitleFromMarc($biblioUrl, $apiToken) {
     $series = [];
     foreach ($marc['fields'] as $field) {
         if (isset($field['490']['subfields'])) {
+            $name = null;
+            $volume = null;
+            $issn = null;
             foreach ($field['490']['subfields'] as $subfield) {
-                if (isset($subfield['a'])) {
-                    $series[] = $subfield['a'];
-                }
+                if (isset($subfield['a'])) $name = trimMarcPunctuation($subfield['a']);
+                if (isset($subfield['v'])) $volume = trimMarcPunctuation($subfield['v']);
+                if (isset($subfield['x'])) $issn = trimMarcPunctuation($subfield['x']);
+            }
+            if ($name !== null && $name !== '') {
+                $entry = ['name' => $name];
+                if ($volume !== null && $volume !== '') $entry['volume'] = $volume;
+                if ($issn !== null && $issn !== '') $entry['issn'] = $issn;
+                $series[] = $entry;
             }
         }
     }
@@ -120,13 +135,8 @@ function getBookDataFromApi($biblioId, $apiBaseUrl, $apiToken) {
     if ($httpCode === 200 && $response) {
         $data = json_decode($response, true);
 
-        // Bygg series_title som array: Koha JSON-värde + MARC 490$a fallback
-        $kohaSeriesTitle = $data['series_title'] ?? null;
-        $seriesTitle = !empty($kohaSeriesTitle) ? [$kohaSeriesTitle] : null;
-
-        if ($seriesTitle === null) {
-            $seriesTitle = getSeriesTitleFromMarc($apiBaseUrl . $biblioId, $apiToken);
-        }
+        // Hämta serieinfo från MARC 490 (strukturerade objekt med name/volume/issn)
+        $seriesTitle = getSeriesFromMarc($apiBaseUrl . $biblioId, $apiToken);
 
         return [
             'isbn' => $data['isbn'] ?? null,

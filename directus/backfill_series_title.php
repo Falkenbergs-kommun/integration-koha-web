@@ -129,25 +129,24 @@ function main()
         }
 
         $marcUrl = $apiBaseUrl . $biblioId;
-        $seriesTitle = getSeriesTitleFromMarc($marcUrl, $kohaToken);
+        $seriesData = getSeriesFromMarc($marcUrl, $kohaToken);
 
-        if ($seriesTitle === null) {
+        if ($seriesData === null) {
             $stats['not_found']++;
-            if ($verbose) echo "  [{$num}/{$total}] biblio_id={$biblioId} — ingen 490\$a\n";
+            if ($verbose) echo "  [{$num}/{$total}] biblio_id={$biblioId} — ingen 490\n";
             continue;
         }
 
-        // $seriesTitle är nu en array från getSeriesTitleFromMarc()
         $stats['found']++;
 
         if ($verbose || $num % 100 === 0 || $num === $total) {
-            echo "  [{$num}/{$total}] biblio_id={$biblioId} → " . json_encode($seriesTitle, JSON_UNESCAPED_UNICODE) . "\n";
+            echo "  [{$num}/{$total}] biblio_id={$biblioId} → " . json_encode($seriesData, JSON_UNESCAPED_UNICODE) . "\n";
         }
 
         if (!$dryRun) {
             try {
                 $directusClient->updateItem('kft_koha_biblios', $directusId, [
-                    'series_title' => $seriesTitle
+                    'series_title' => $seriesData
                 ]);
             } catch (Exception $e) {
                 $stats['errors']++;

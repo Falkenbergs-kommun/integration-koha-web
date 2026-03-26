@@ -382,10 +382,10 @@ function main()
                 // Transform data
                 $directusData = transformKohaToDirectus($kohaBook);
 
-                // Fallback: hämta series_title från MARC 490$a om det saknas
+                // Hämta serieinfo från MARC 490 (name/volume/issn)
                 if (empty($directusData['series_title'])) {
                     $marcUrl = rtrim($config['API_BASE_URL'], '/') . '/' . $biblioId;
-                    $marcSeries = getSeriesTitleFromMarc($marcUrl, $kohaToken);
+                    $marcSeries = getSeriesFromMarc($marcUrl, $kohaToken);
                     if ($marcSeries !== null) {
                         $directusData['series_title'] = $marcSeries;
                     }

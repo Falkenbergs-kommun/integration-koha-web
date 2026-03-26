@@ -33,8 +33,9 @@ This is a PHP-based RSS-to-JSON converter for Falkenbergs bibliotek (Falkenberg 
 
 - `loadEnv($filePath)` - Simple .env parser without external dependencies
 - `getOAuthToken($oauthUrl, $clientId, $clientSecret)` - OAuth 2.0 client credentials flow
-- `getSeriesTitleFromMarc($biblioUrl, $apiToken)` - Fetch all series titles from MARC 490$a fields, returns `string[]|null`
-- `getBookDataFromApi($biblioId, $apiBaseUrl, $apiToken)` - Fetch 20+ metadata fields per book (series_title via MARC 490$a fallback, returns array)
+- `trimMarcPunctuation($str)` - Strip trailing MARC punctuation (; , / .)
+- `getSeriesFromMarc($biblioUrl, $apiToken)` - Fetch series info from MARC 490 fields, returns `[{"name", "volume"?, "issn"?}]|null`
+- `getBookDataFromApi($biblioId, $apiBaseUrl, $apiToken)` - Fetch 20+ metadata fields per book (series_title via MARC 490 fallback as structured objects)
 - `getItemTypesFromApi($apiBaseUrl, $apiToken)` - Fetch all item types with 6 metadata fields (id, description, parent, image, category, visibility)
 - `getFilteredBibliosFromItems($apiBaseUrl, $apiToken, $itemTypes, $limit)` - Fetch biblios filtered by item_type_id using items endpoint with biblio embedding
 - `extractBiblioId($url)` - Parse biblionumber from Koha URLs using regex
@@ -103,7 +104,7 @@ curl http://localhost/bibliotek/debug.php
 - OAuth credentials stored in .env file (properly gitignored)
 
 ### API Response Structure
-The final JSON includes 20+ metadata fields per book including ISBN, title, author, abstract, subtitle, publisher, publication year/place, pages, material size, edition, series (as JSON array), age restriction, URL, EAN, and notes. `series_title` is `string[]|null` — a book can belong to multiple series (MARC 490 repeatable field). Always maintain this comprehensive structure when modifying data processing.
+The final JSON includes 20+ metadata fields per book including ISBN, title, author, abstract, subtitle, publisher, publication year/place, pages, material size, edition, series (as JSON array), age restriction, URL, EAN, and notes. `series_title` is an array of objects `[{"name": "...", "volume": "del 3", "issn": "..."}]|null` — a book can belong to multiple series (MARC 490 repeatable field), each with optional volume/part number and ISSN. Always maintain this comprehensive structure when modifying data processing.
 
 ### RSS Feed Quirks
 - Requires `KOHA_INIT=1` cookie to bypass library system login redirects
@@ -143,7 +144,7 @@ The final JSON includes 20+ metadata fields per book including ISBN, title, auth
 - **Koha API har korrupta poster** – Vissa items har ogiltiga datumfält (`replacement_price_date` med "Month out of range") som ger HTTP 500. `sync_koha_items.php` hanterar detta med fallback: 500 → 10 → hoppa förbi.
 - **OAuth-tokens löper ut efter ~1h** – Items-synken tar ~2.5h, så token förnyas automatiskt var 45:e minut. Koha returnerar tom array (inte felkod) vid utgången token – tyst fel.
 - **`--start-from` hoppar över soft-delete** – Vid partiell sync kan man inte avgöra vilka poster som saknas i källan, så inactive-markering skippas.
-- **`series_title` är JSON-array** – Koha REST API returnerar alltid `series_title: null`, men MARC 490$a (repeterbart fält) innehåller serieinformation. Synken gör ett extra MARC-anrop per ny/ändrad post (inte alla 68k) och lagrar resultatet som JSON-array i Directus. Qdrant keyword-index stödjer arrays nativt.
+- **`series_title` är JSON-array av objekt** – Koha REST API returnerar alltid `series_title: null`, men MARC 490 (repeterbart fält) innehåller serieinformation i subfält `$a` (namn), `$v` (volym/del) och `$x` (ISSN). Synken gör ett extra MARC-anrop per ny/ändrad post (inte alla 68k) och lagrar som `[{"name":"...","volume":"del 3"}]` i Directus. MARC-punktuation (avslutande `;` etc) trimmas av `trimMarcPunctuation()`. Qdrant keyword-index lagrar bara serienamnen (utan volume).
 - **`safeTruncate()` i `common.php`** – Delad multibyte-safe trunkering, används av alla sync-scripts.
 - **`image_cached` och `image_cached_url` skrivs INTE av synken** – dessa fält ägs av webbendpointsen (`common.php`, `latest.php`) som cachar bilder lokalt. Synken skriver dem aldrig, annars nollas cachade bilder varje natt.
 - **Soft delete** – poster som försvinner från Koha markeras `status=inactive`, raderas inte.

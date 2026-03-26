@@ -247,15 +247,24 @@ function buildEmbeddingText($biblio, $enriched, $itemAgg, $holdData, $itemTypeLa
         $parts[] = 'Mediatyp: ' . implode(', ', $typeLabels);
     }
 
-    // ── Serie (JSON-array eller legacy-sträng) ──
+    // ── Serie (JSON-array av objekt med name/volume/issn) ──
     $seriesRaw = $biblio['series_title'] ?? null;
     if ($seriesRaw !== null) {
         $seriesArr = is_array($seriesRaw) ? $seriesRaw : (is_string($seriesRaw) ? json_decode($seriesRaw, true) : null);
-        if (!is_array($seriesArr) && is_string($seriesRaw) && $seriesRaw !== '') {
-            $seriesArr = [$seriesRaw];
-        }
-        if (!empty($seriesArr)) {
-            $parts[] = 'Serie: ' . implode(', ', $seriesArr);
+        if (is_array($seriesArr) && !empty($seriesArr)) {
+            $seriesParts = [];
+            foreach ($seriesArr as $s) {
+                if (is_array($s) && !empty($s['name'])) {
+                    $part = $s['name'];
+                    if (!empty($s['volume'])) $part .= ' ' . $s['volume'];
+                    $seriesParts[] = $part;
+                } elseif (is_string($s) && $s !== '') {
+                    $seriesParts[] = $s;
+                }
+            }
+            if (!empty($seriesParts)) {
+                $parts[] = 'Serie: ' . implode(', ', $seriesParts);
+            }
         }
     }
 
@@ -428,14 +437,23 @@ function buildMetadata($biblio, $enriched, $itemAgg, $holdData, $itemTypeLabels)
     $meta['subtitle'] = $biblio['subtitle'] ?? null;
     $meta['publisher'] = $biblio['publisher'] ?? null;
     $meta['publication_place'] = $biblio['publication_place'] ?? null;
-    // series_title: säkerställ array för Qdrant keyword-index
+    // series_title: objekt-array → extrahera serienamn för Qdrant keyword-index
     $stRaw = $biblio['series_title'] ?? null;
     if ($stRaw !== null) {
         $stArr = is_array($stRaw) ? $stRaw : (is_string($stRaw) ? json_decode($stRaw, true) : null);
-        if (!is_array($stArr) && is_string($stRaw) && $stRaw !== '') {
-            $stArr = [$stRaw];
+        if (is_array($stArr) && !empty($stArr)) {
+            $names = [];
+            foreach ($stArr as $s) {
+                if (is_array($s) && !empty($s['name'])) {
+                    $names[] = $s['name'];
+                } elseif (is_string($s) && $s !== '') {
+                    $names[] = trim(rtrim(trim($s), ';,/.'));
+                }
+            }
+            $meta['series_title'] = !empty($names) ? array_values(array_unique($names)) : null;
+        } else {
+            $meta['series_title'] = null;
         }
-        $meta['series_title'] = !empty($stArr) ? $stArr : null;
     } else {
         $meta['series_title'] = null;
     }
