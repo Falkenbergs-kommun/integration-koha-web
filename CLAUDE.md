@@ -33,7 +33,8 @@ This is a PHP-based RSS-to-JSON converter for Falkenbergs bibliotek (Falkenberg 
 
 - `loadEnv($filePath)` - Simple .env parser without external dependencies
 - `getOAuthToken($oauthUrl, $clientId, $clientSecret)` - OAuth 2.0 client credentials flow
-- `getBookDataFromApi($biblioId, $apiBaseUrl, $apiToken)` - Fetch 20+ metadata fields per book
+- `getSeriesTitleFromMarc($biblioUrl, $apiToken)` - Fetch all series titles from MARC 490$a fields, returns `string[]|null`
+- `getBookDataFromApi($biblioId, $apiBaseUrl, $apiToken)` - Fetch 20+ metadata fields per book (series_title via MARC 490$a fallback, returns array)
 - `getItemTypesFromApi($apiBaseUrl, $apiToken)` - Fetch all item types with 6 metadata fields (id, description, parent, image, category, visibility)
 - `getFilteredBibliosFromItems($apiBaseUrl, $apiToken, $itemTypes, $limit)` - Fetch biblios filtered by item_type_id using items endpoint with biblio embedding
 - `extractBiblioId($url)` - Parse biblionumber from Koha URLs using regex
@@ -102,7 +103,7 @@ curl http://localhost/bibliotek/debug.php
 - OAuth credentials stored in .env file (properly gitignored)
 
 ### API Response Structure
-The final JSON includes 20+ metadata fields per book including ISBN, title, author, abstract, subtitle, publisher, publication year/place, pages, material size, edition, series, age restriction, URL, EAN, and notes. Always maintain this comprehensive structure when modifying data processing.
+The final JSON includes 20+ metadata fields per book including ISBN, title, author, abstract, subtitle, publisher, publication year/place, pages, material size, edition, series (as JSON array), age restriction, URL, EAN, and notes. `series_title` is `string[]|null` — a book can belong to multiple series (MARC 490 repeatable field). Always maintain this comprehensive structure when modifying data processing.
 
 ### RSS Feed Quirks
 - Requires `KOHA_INIT=1` cookie to bypass library system login redirects
@@ -123,6 +124,7 @@ The final JSON includes 20+ metadata fields per book including ISBN, title, auth
 - **`sync_koha_branches.php`** – Synkar ~11 filialer från Koha `/libraries` till `kft_koha_branches`. Snabb, ingen paginering.
 - **`sync_koha_items.php`** – Synkar ~155k exemplar från Koha `/items` till `kft_koha_items`. Streaming-arkitektur med cursor-paginering (`q={"item_id":{">":<id>}}`), automatisk OAuth-tokenförnyelse var 45:e minut, och fallback vid korrupta poster. Stöder `--start-from=N` och `--verbose`.
 - **`DirectusClient.php`** – PHP-klient för Directus REST API (CRUD + bulk-create/delete). Exponerar `getBaseUrl()` och `getToken()` för custom-queries utanför standard-CRUD.
+- **`backfill_series_title.php`** – Engångsscript som hämtar series_title (MARC 490$a) för alla biblios utan serie och sparar som JSON-array i Directus. Stöder `--dry-run`, `--limit=N`, `-v`.
 - **`cleanup_duplicates.php`** – Rensar dubbletter i `kft_koha_biblios`. Kör med `--dry-run` för förhandsvisning.
 - **`sync_cron.sh`** – Kör alla syncar i sekvens: Branches → Biblios → Items → Holds → Qdrant vectors (dagligen kl 03:00). Skickar start/success/fail-ping till healthchecks.io med per-steg-payload (nyckeltal som created/updated/errors). Konfigureras via `HEALTHCHECK_SYNC_ID` i `.env`.
 - **`prepare_embedding_text.php`** – Aggregerar data från alla 4 Directus-kollektioner och bygger strukturerad embedding-text + metadata per biblio. Stöder `--output=json|jsonl|csv`, `--limit=N`, `--biblio-id=N`.
@@ -132,7 +134,7 @@ The final JSON includes 20+ metadata fields per book including ISBN, title, auth
 1. Hämtar alla Koha-biblios via paginerad API (500/sida, sortering `-biblio_id`)
 2. Hämtar alla Directus-poster via paginerad offset (`sort=id ASC` – kritiskt för stabilitet)
 3. Bygger lookup-map `biblio_id → Directus-id`; dubbletter samlas för radering
-4. Uppdaterar befintliga / skapar nya poster
+4. Uppdaterar befintliga / skapar nya poster (med MARC 490$a-lookup för series_title)
 5. Raderar ev. dubbletter (steg 4b)
 6. Markerar poster som `inactive` om biblio_id försvunnit från Koha
 
@@ -141,6 +143,7 @@ The final JSON includes 20+ metadata fields per book including ISBN, title, auth
 - **Koha API har korrupta poster** – Vissa items har ogiltiga datumfält (`replacement_price_date` med "Month out of range") som ger HTTP 500. `sync_koha_items.php` hanterar detta med fallback: 500 → 10 → hoppa förbi.
 - **OAuth-tokens löper ut efter ~1h** – Items-synken tar ~2.5h, så token förnyas automatiskt var 45:e minut. Koha returnerar tom array (inte felkod) vid utgången token – tyst fel.
 - **`--start-from` hoppar över soft-delete** – Vid partiell sync kan man inte avgöra vilka poster som saknas i källan, så inactive-markering skippas.
+- **`series_title` är JSON-array** – Koha REST API returnerar alltid `series_title: null`, men MARC 490$a (repeterbart fält) innehåller serieinformation. Synken gör ett extra MARC-anrop per ny/ändrad post (inte alla 68k) och lagrar resultatet som JSON-array i Directus. Qdrant keyword-index stödjer arrays nativt.
 - **`safeTruncate()` i `common.php`** – Delad multibyte-safe trunkering, används av alla sync-scripts.
 - **`image_cached` och `image_cached_url` skrivs INTE av synken** – dessa fält ägs av webbendpointsen (`common.php`, `latest.php`) som cachar bilder lokalt. Synken skriver dem aldrig, annars nollas cachade bilder varje natt.
 - **Soft delete** – poster som försvinner från Koha markeras `status=inactive`, raderas inte.

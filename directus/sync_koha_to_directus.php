@@ -62,7 +62,7 @@ function transformKohaToDirectus($kohaBook)
 
         // Edition and series
         'edition_statement' => safeTruncate($kohaBook['edition_statement'] ?? null, 255),
-        'series_title' => safeTruncate($kohaBook['series_title'] ?? null, 255),
+        'series_title' => !empty($kohaBook['series_title']) ? [$kohaBook['series_title']] : null,
 
         // Additional metadata
         'age_restriction' => safeTruncate($kohaBook['age_restriction'] ?? null, 50),
@@ -381,6 +381,15 @@ function main()
 
                 // Transform data
                 $directusData = transformKohaToDirectus($kohaBook);
+
+                // Fallback: hämta series_title från MARC 490$a om det saknas
+                if (empty($directusData['series_title'])) {
+                    $marcUrl = rtrim($config['API_BASE_URL'], '/') . '/' . $biblioId;
+                    $marcSeries = getSeriesTitleFromMarc($marcUrl, $kohaToken);
+                    if ($marcSeries !== null) {
+                        $directusData['series_title'] = $marcSeries;
+                    }
+                }
 
                 if ($existing) {
                     // Update existing - use Directus id, not biblio_id!

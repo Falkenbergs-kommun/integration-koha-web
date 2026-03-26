@@ -62,6 +62,45 @@ function getOAuthToken($oauthUrl, $clientId, $clientSecret) {
     return null;
 }
 
+// Hämta series_title från MARC-post (fält 490$a)
+function getSeriesTitleFromMarc($biblioUrl, $apiToken) {
+    $ch = curl_init();
+    curl_setopt($ch, CURLOPT_URL, $biblioUrl);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+    curl_setopt($ch, CURLOPT_HTTPHEADER, [
+        'Accept: application/marc-in-json',
+        'Authorization: Bearer ' . $apiToken
+    ]);
+    curl_setopt($ch, CURLOPT_TIMEOUT, 10);
+
+    $response = curl_exec($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+
+    if ($httpCode !== 200 || !$response) {
+        return null;
+    }
+
+    $marc = json_decode($response, true);
+    if (!isset($marc['fields']) || !is_array($marc['fields'])) {
+        return null;
+    }
+
+    $series = [];
+    foreach ($marc['fields'] as $field) {
+        if (isset($field['490']['subfields'])) {
+            foreach ($field['490']['subfields'] as $subfield) {
+                if (isset($subfield['a'])) {
+                    $series[] = $subfield['a'];
+                }
+            }
+        }
+    }
+
+    return count($series) > 0 ? $series : null;
+}
+
 // Funktion för att hämta bokdata från API
 function getBookDataFromApi($biblioId, $apiBaseUrl, $apiToken) {
     $ch = curl_init();
@@ -81,6 +120,14 @@ function getBookDataFromApi($biblioId, $apiBaseUrl, $apiToken) {
     if ($httpCode === 200 && $response) {
         $data = json_decode($response, true);
 
+        // Bygg series_title som array: Koha JSON-värde + MARC 490$a fallback
+        $kohaSeriesTitle = $data['series_title'] ?? null;
+        $seriesTitle = !empty($kohaSeriesTitle) ? [$kohaSeriesTitle] : null;
+
+        if ($seriesTitle === null) {
+            $seriesTitle = getSeriesTitleFromMarc($apiBaseUrl . $biblioId, $apiToken);
+        }
+
         return [
             'isbn' => $data['isbn'] ?? null,
             'title' => $data['title'] ?? null,
@@ -93,7 +140,7 @@ function getBookDataFromApi($biblioId, $apiBaseUrl, $apiToken) {
             'pages' => $data['pages'] ?? null,
             'material_size' => $data['material_size'] ?? null,
             'edition_statement' => $data['edition_statement'] ?? null,
-            'series_title' => $data['series_title'] ?? null,
+            'series_title' => $seriesTitle,
             'age_restriction' => $data['age_restriction'] ?? null,
             'url' => $data['url'] ?? null,
             'ean' => $data['ean'] ?? null,

@@ -247,10 +247,16 @@ function buildEmbeddingText($biblio, $enriched, $itemAgg, $holdData, $itemTypeLa
         $parts[] = 'Mediatyp: ' . implode(', ', $typeLabels);
     }
 
-    // ── Serie ──
-    $series = trim($biblio['series_title'] ?? '');
-    if ($series) {
-        $parts[] = 'Serie: ' . $series;
+    // ── Serie (JSON-array eller legacy-sträng) ──
+    $seriesRaw = $biblio['series_title'] ?? null;
+    if ($seriesRaw !== null) {
+        $seriesArr = is_array($seriesRaw) ? $seriesRaw : (is_string($seriesRaw) ? json_decode($seriesRaw, true) : null);
+        if (!is_array($seriesArr) && is_string($seriesRaw) && $seriesRaw !== '') {
+            $seriesArr = [$seriesRaw];
+        }
+        if (!empty($seriesArr)) {
+            $parts[] = 'Serie: ' . implode(', ', $seriesArr);
+        }
     }
 
     // ── Abstract (enriched prioriteras) ──
@@ -422,7 +428,17 @@ function buildMetadata($biblio, $enriched, $itemAgg, $holdData, $itemTypeLabels)
     $meta['subtitle'] = $biblio['subtitle'] ?? null;
     $meta['publisher'] = $biblio['publisher'] ?? null;
     $meta['publication_place'] = $biblio['publication_place'] ?? null;
-    $meta['series_title'] = $biblio['series_title'] ?? null;
+    // series_title: säkerställ array för Qdrant keyword-index
+    $stRaw = $biblio['series_title'] ?? null;
+    if ($stRaw !== null) {
+        $stArr = is_array($stRaw) ? $stRaw : (is_string($stRaw) ? json_decode($stRaw, true) : null);
+        if (!is_array($stArr) && is_string($stRaw) && $stRaw !== '') {
+            $stArr = [$stRaw];
+        }
+        $meta['series_title'] = !empty($stArr) ? $stArr : null;
+    } else {
+        $meta['series_title'] = null;
+    }
     $meta['age_restriction'] = $biblio['age_restriction'] ?? null;
     $meta['ean'] = $biblio['ean'] ?? null;
     $meta['has_enriched_abstract'] = ($enriched && !empty($enriched['abstract_enriched']));
