@@ -7,7 +7,8 @@
 # 2. Biblios (books) - medium, ~70k records
 # 3. Items (exemplar) - large, ~155k records
 # 4. Holds (reservations) - fast, ~1900 holds aggregated to ~1140 biblios
-# 5. Qdrant vectors - hybrid search embeddings (dense + sparse)
+# 5. Enrich metadata - Gemini AI enrichment (up to 1000 books/run)
+# 6. Qdrant vectors - hybrid search embeddings (dense + sparse)
 #
 # Sends start/success/fail pings to healthchecks.io with per-step payload.
 #
@@ -17,6 +18,9 @@
 # @package    Falkenbergs kommun
 # @subpackage Koha Sync
 ###############################################################################
+
+# Ensure uv is in PATH (not available in cron's minimal PATH)
+export PATH="/home/httpd/fbg-intranet/.local/bin:$PATH"
 
 # Configuration
 SCRIPT_DIR="/home/httpd/fbg-intranet/integrationer/integration-koha-web/directus"
@@ -146,7 +150,32 @@ run_sync "Items" "$SYNC_ITEMS" || OVERALL_RESULT="PARTIAL_FAILURE"
 # Step 4: Holds (aggregated reservations, depends on items + biblios)
 run_sync "Holds" "$SYNC_HOLDS" || OVERALL_RESULT="PARTIAL_FAILURE"
 
-# Step 5: Qdrant vector sync (depends on all previous data being current)
+# Step 5: Enrich metadata with Gemini AI (up to 1000 books per run)
+ENRICH_DIR="/home/httpd/fbg-intranet/integrationer/integration-koha-web/enrich"
+if [ -d "$ENRICH_DIR" ]; then
+    STEP_TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S')
+    echo "[$STEP_TIMESTAMP] Starting sync: Enrich metadata..." >> "$LOG_FILE"
+
+    enrich_output=$(cd "$ENRICH_DIR" && uv run enrich_from_directus.py --limit 1000 2>&1)
+    enrich_exit=$?
+
+    echo "$enrich_output" >> "$LOG_FILE"
+
+    enrich_stats=$(echo "$enrich_output" | grep -E '(Enriched|Skipped|Errors|Total|Cost|books)' | sed 's/^[[:space:]]*//' | head -5)
+
+    if [ $enrich_exit -eq 0 ]; then
+        echo "[$STEP_TIMESTAMP] Enrich metadata: SUCCESS" >> "$LOG_FILE"
+        STEP_OUTPUTS="${STEP_OUTPUTS}--- Enrich: OK ---\n${enrich_stats}\n\n"
+    else
+        echo "[$STEP_TIMESTAMP] Enrich metadata: FAILED" >> "$LOG_FILE"
+        echo "[$STEP_TIMESTAMP] ERROR: Enrich failed! Check ${LOG_FILE} for details." >> "$ERROR_LOG"
+        OVERALL_RESULT="PARTIAL_FAILURE"
+        STEP_OUTPUTS="${STEP_OUTPUTS}--- Enrich: FAILED ---\n${enrich_stats}\n\n"
+    fi
+    cd "$SCRIPT_DIR"
+fi
+
+# Step 6: Qdrant vector sync (depends on all previous data being current)
 QDRANT_DIR="/home/httpd/fbg-intranet/integrationer/integration-koha-web/qdrant"
 if [ -d "$QDRANT_DIR" ]; then
     STEP_TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S')

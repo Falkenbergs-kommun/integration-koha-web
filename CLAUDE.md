@@ -127,7 +127,7 @@ The final JSON includes 20+ metadata fields per book including ISBN, title, auth
 - **`DirectusClient.php`** – PHP-klient för Directus REST API (CRUD + bulk-create/delete). Exponerar `getBaseUrl()` och `getToken()` för custom-queries utanför standard-CRUD.
 - **`backfill_series_title.php`** – Engångsscript som hämtar series_title (MARC 490$a) för alla biblios utan serie och sparar som JSON-array i Directus. Stöder `--dry-run`, `--limit=N`, `-v`.
 - **`cleanup_duplicates.php`** – Rensar dubbletter i `kft_koha_biblios`. Kör med `--dry-run` för förhandsvisning.
-- **`sync_cron.sh`** – Kör alla syncar i sekvens: Branches → Biblios → Items → Holds → Qdrant vectors (dagligen kl 03:00). Skickar start/success/fail-ping till healthchecks.io med per-steg-payload (nyckeltal som created/updated/errors). Konfigureras via `HEALTHCHECK_SYNC_ID` i `.env`.
+- **`sync_cron.sh`** – Kör alla syncar i sekvens: Branches → Biblios → Items → Holds → Enrich (1000 böcker) → Qdrant vectors (dagligen kl 03:00). Skickar start/success/fail-ping till healthchecks.io med per-steg-payload (nyckeltal som created/updated/errors). Konfigureras via `HEALTHCHECK_SYNC_ID` i `.env`. Exporterar `~/.local/bin` i PATH för att `uv` ska hittas i cron-miljön.
 - **`prepare_embedding_text.php`** – Aggregerar data från alla 4 Directus-kollektioner och bygger strukturerad embedding-text + metadata per biblio. Stöder `--output=json|jsonl|csv`, `--limit=N`, `--biblio-id=N`.
 
 ### Synklogik (sync_koha_to_directus.php)
@@ -271,7 +271,7 @@ uv run sync_to_qdrant.py --limit=50 -v      # Test with 50 books
 - **Inkrementell sync**: SHA256 av embedding-texten sparas som `content_hash` i Qdrant payload. Bara ändrade poster omgenereras (~$0.01-0.03/dag vs ~$0.73 för full sync).
 - **IPv4-workaround**: Qdrant-servern har AAAA-records men lyssnar inte på IPv6. Scriptet tvingar IPv4 via socket monkey-patch (samma som crawler-projektet).
 - **BM25 sparse vectors**: Genereras lokalt (ingen API-kostnad). IDF-viktning beräknas server-side av Qdrant.
-- **Cron**: Körs som steg 5 i `sync_cron.sh` (efter Branches → Biblios → Items → Holds).
+- **Cron**: Körs som steg 6 i `sync_cron.sh` (efter Branches → Biblios → Items → Holds → Enrich).
 
 ### Qdrant API
 
