@@ -237,6 +237,15 @@ function buildEmbeddingText($biblio, $enriched, $itemAgg, $holdData, $itemTypeLa
     }
     $parts[] = $titleLine;
 
+    // ── Medverkande (från MARC 700$a) ──
+    $contributors = $biblio['contributors'] ?? null;
+    if (is_string($contributors)) {
+        $contributors = json_decode($contributors, true);
+    }
+    if (is_array($contributors) && !empty($contributors)) {
+        $parts[] = 'Medverkande: ' . implode(', ', $contributors);
+    }
+
     // ── Mediatyp ──
     if ($itemAgg && !empty($itemAgg['item_types'])) {
         $typeLabels = [];
@@ -303,6 +312,30 @@ function buildEmbeddingText($biblio, $enriched, $itemAgg, $holdData, $itemTypeLa
         }
     }
 
+    // ── MARC-ämnesord (komplement till AI-berikade ämnen) ──
+    $subjectsMarc = $biblio['subjects_marc'] ?? null;
+    if (is_string($subjectsMarc)) {
+        $subjectsMarc = json_decode($subjectsMarc, true);
+    }
+    if (is_array($subjectsMarc) && !empty($subjectsMarc)) {
+        $parts[] = 'Ämnesord: ' . implode(', ', $subjectsMarc);
+    }
+
+    // ── Genre/form (från MARC 655$a) ──
+    $genreForm = $biblio['genre_form'] ?? null;
+    if (is_string($genreForm)) {
+        $genreForm = json_decode($genreForm, true);
+    }
+    if (is_array($genreForm) && !empty($genreForm)) {
+        $parts[] = 'Genre: ' . implode(', ', $genreForm);
+    }
+
+    // ── Språk (från MARC 008) ──
+    $langCode = trim($biblio['language_code'] ?? '');
+    if ($langCode) {
+        $parts[] = 'Språk: ' . $langCode;
+    }
+
     // ── Förlag och publicering ──
     $pubParts = [];
     $publisher = trim($biblio['publisher'] ?? '');
@@ -331,6 +364,12 @@ function buildEmbeddingText($biblio, $enriched, $itemAgg, $holdData, $itemTypeLa
     $ageRestriction = trim($biblio['age_restriction'] ?? '');
     if ($ageRestriction) {
         $parts[] = 'Åldersgräns: ' . $ageRestriction;
+    }
+
+    // ── SAB-klassifikation (från MARC 084$a) ──
+    $sabClass = trim($biblio['sab_classification'] ?? '');
+    if ($sabClass) {
+        $parts[] = 'SAB: ' . $sabClass;
     }
 
     // ── Hyllsignum / klassifikation ──
@@ -473,6 +512,22 @@ function buildMetadata($biblio, $enriched, $itemAgg, $holdData, $itemTypeLabels)
     $meta['catalog_link'] = $biblio['catalog_link'] ?? null;
     $meta['image_url'] = $biblio['image_cached_url'] ?? $biblio['image_url'] ?? null;
 
+    // MARC-baserade fält
+    $meta['language_code'] = $biblio['language_code'] ?? null;
+    $meta['sab_classification'] = $biblio['sab_classification'] ?? null;
+
+    $subjectsMarc = $biblio['subjects_marc'] ?? null;
+    if (is_string($subjectsMarc)) $subjectsMarc = json_decode($subjectsMarc, true);
+    $meta['subjects_marc'] = is_array($subjectsMarc) ? $subjectsMarc : null;
+
+    $genreForm = $biblio['genre_form'] ?? null;
+    if (is_string($genreForm)) $genreForm = json_decode($genreForm, true);
+    $meta['genre_form'] = is_array($genreForm) ? $genreForm : null;
+
+    $contributors = $biblio['contributors'] ?? null;
+    if (is_string($contributors)) $contributors = json_decode($contributors, true);
+    $meta['contributors'] = is_array($contributors) ? $contributors : null;
+
     return $meta;
 }
 
@@ -543,7 +598,8 @@ function main()
     $biblioFields = 'id,biblio_id,title,subtitle,author,abstract,isbn,isbn_clean,'
         . 'publisher,publication_year,publication_place,pages,material_size,'
         . 'edition_statement,series_title,age_restriction,notes,ean,issn,'
-        . 'catalog_link,image_url,image_cached_url,serial,copyright_date';
+        . 'catalog_link,image_url,image_cached_url,serial,copyright_date,'
+        . 'language_code,subjects_marc,genre_form,sab_classification,contributors';
 
     $biblios = fetchAllFromCollection($client, 'kft_koha_biblios', $biblioFields, $biblioFilter, $verbose);
     echo "  Hämtade " . count($biblios) . " biblios\n\n";

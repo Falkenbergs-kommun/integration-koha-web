@@ -67,9 +67,9 @@ function trimMarcPunctuation($str) {
     return trim(rtrim(trim($str), ';,/.'));
 }
 
-// Hämta serieinfo från MARC 490 (subfields $a, $v, $x)
-// Returnerar array av objekt: [{"name": "...", "volume": "...", "issn": "..."}] eller null
-function getSeriesFromMarc($biblioUrl, $apiToken) {
+// Hämta MARC-post som decoded array (marc-in-json)
+// Returnerar decoded MARC-array eller null vid fel
+function fetchMarcRecord($biblioUrl, $apiToken) {
     $ch = curl_init();
     curl_setopt($ch, CURLOPT_URL, $biblioUrl);
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
@@ -93,16 +93,84 @@ function getSeriesFromMarc($biblioUrl, $apiToken) {
         return null;
     }
 
+    return $marc;
+}
+
+// Extrahera flera fält från en MARC-post (ren parsning, ingen I/O)
+// Returnerar associativ array med: series_title, publication_year, language_code,
+// subjects, genre_form, sab_classification, contributors
+function extractFieldsFromMarc(array $marc) {
+    $result = [
+        'series_title' => null,
+        'publication_year' => null,
+        'language_code' => null,
+        'subjects' => [],
+        'genre_form' => [],
+        'sab_classification' => null,
+        'contributors' => [],
+    ];
+
+    // MARC 008: kontrollfält med fast längd (språkkod pos 35-37)
+    // 008 är ett kontrollfält utan subfields, lagras som direkt sträng
+    if (isset($marc['fields'])) {
+        foreach ($marc['fields'] as $field) {
+            if (isset($field['008']) && is_string($field['008'])) {
+                $val = $field['008'];
+                if (strlen($val) >= 38) {
+                    $lang = substr($val, 35, 3);
+                    if (preg_match('/^[a-z]{3}$/', $lang) && $lang !== '   ') {
+                        $result['language_code'] = $lang;
+                    }
+                }
+                break; // 008 förekommer bara en gång
+            }
+        }
+    }
+
+    $pubYear264 = null;
+    $pubYear260 = null;
     $series = [];
+
     foreach ($marc['fields'] as $field) {
+        // MARC 084$a: SAB-klassifikation (ta första förekomsten)
+        if (isset($field['084']['subfields']) && $result['sab_classification'] === null) {
+            foreach ($field['084']['subfields'] as $sf) {
+                if (isset($sf['a'])) {
+                    $result['sab_classification'] = trimMarcPunctuation($sf['a']);
+                    break;
+                }
+            }
+        }
+
+        // MARC 264$c: utgivningsår (RDA-standard, föredras)
+        if (isset($field['264']['subfields']) && $pubYear264 === null) {
+            foreach ($field['264']['subfields'] as $sf) {
+                if (isset($sf['c'])) {
+                    $pubYear264 = trimMarcPunctuation($sf['c']);
+                    break;
+                }
+            }
+        }
+
+        // MARC 260$c: utgivningsår (äldre format, fallback)
+        if (isset($field['260']['subfields']) && $pubYear260 === null) {
+            foreach ($field['260']['subfields'] as $sf) {
+                if (isset($sf['c'])) {
+                    $pubYear260 = trimMarcPunctuation($sf['c']);
+                    break;
+                }
+            }
+        }
+
+        // MARC 490: serieinfo (subfields $a, $v, $x) — repeterbart
         if (isset($field['490']['subfields'])) {
             $name = null;
             $volume = null;
             $issn = null;
-            foreach ($field['490']['subfields'] as $subfield) {
-                if (isset($subfield['a'])) $name = trimMarcPunctuation($subfield['a']);
-                if (isset($subfield['v'])) $volume = trimMarcPunctuation($subfield['v']);
-                if (isset($subfield['x'])) $issn = trimMarcPunctuation($subfield['x']);
+            foreach ($field['490']['subfields'] as $sf) {
+                if (isset($sf['a'])) $name = trimMarcPunctuation($sf['a']);
+                if (isset($sf['v'])) $volume = trimMarcPunctuation($sf['v']);
+                if (isset($sf['x'])) $issn = trimMarcPunctuation($sf['x']);
             }
             if ($name !== null && $name !== '') {
                 $entry = ['name' => $name];
@@ -111,9 +179,70 @@ function getSeriesFromMarc($biblioUrl, $apiToken) {
                 $series[] = $entry;
             }
         }
+
+        // MARC 650$a: ämnesord (repeterbart)
+        if (isset($field['650']['subfields'])) {
+            foreach ($field['650']['subfields'] as $sf) {
+                if (isset($sf['a'])) {
+                    $val = trimMarcPunctuation($sf['a']);
+                    if ($val !== '') $result['subjects'][] = $val;
+                }
+            }
+        }
+
+        // MARC 655$a: genre/form (repeterbart)
+        if (isset($field['655']['subfields'])) {
+            foreach ($field['655']['subfields'] as $sf) {
+                if (isset($sf['a'])) {
+                    $val = trimMarcPunctuation($sf['a']);
+                    if ($val !== '') $result['genre_form'][] = $val;
+                }
+            }
+        }
+
+        // MARC 700$a: medverkande (repeterbart)
+        if (isset($field['700']['subfields'])) {
+            foreach ($field['700']['subfields'] as $sf) {
+                if (isset($sf['a'])) {
+                    $val = trimMarcPunctuation($sf['a']);
+                    if ($val !== '') $result['contributors'][] = $val;
+                }
+            }
+        }
     }
 
-    return count($series) > 0 ? $series : null;
+    // Utgivningsår: föredra 264$c (RDA), fallback 260$c
+    $rawYear = $pubYear264 ?? $pubYear260;
+    if ($rawYear !== null && preg_match('/(19|20)\d{2}/', $rawYear, $m)) {
+        $result['publication_year'] = $m[0];
+    }
+
+    // Serietitel
+    $result['series_title'] = count($series) > 0 ? $series : null;
+
+    // Dedupliera arrayer
+    $result['subjects'] = array_values(array_unique($result['subjects']));
+    $result['genre_form'] = array_values(array_unique($result['genre_form']));
+    $result['contributors'] = array_values(array_unique($result['contributors']));
+
+    // Returnera tomma arrayer som null för konsistens
+    if (empty($result['subjects'])) $result['subjects'] = null;
+    if (empty($result['genre_form'])) $result['genre_form'] = null;
+    if (empty($result['contributors'])) $result['contributors'] = null;
+
+    return $result;
+}
+
+// Hämta serieinfo från MARC 490 (subfields $a, $v, $x)
+// Returnerar array av objekt: [{"name": "...", "volume": "...", "issn": "..."}] eller null
+// Bakåtkompatibel wrapper — anropas av getBookDataFromApi() och backfill_series_title.php
+function getSeriesFromMarc($biblioUrl, $apiToken) {
+    $marc = fetchMarcRecord($biblioUrl, $apiToken);
+    if ($marc === null) {
+        return null;
+    }
+    $fields = extractFieldsFromMarc($marc);
+    return $fields['series_title'] ?? null;
 }
 
 // Funktion för att hämta bokdata från API

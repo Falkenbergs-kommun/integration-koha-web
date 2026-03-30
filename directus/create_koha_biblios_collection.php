@@ -348,6 +348,50 @@ function getFieldDefinitions()
             'schema' => ['is_nullable' => true, 'max_length' => 1000]
         ],
 
+        // MARC-derived fields (extracted from MARC-in-JSON, not REST API)
+        [
+            'field' => 'language_code',
+            'type' => 'string',
+            'meta' => ['interface' => 'input', 'width' => 'quarter'],
+            'schema' => ['is_nullable' => true, 'max_length' => 10]
+        ],
+        [
+            'field' => 'subjects_marc',
+            'type' => 'json',
+            'meta' => [
+                'interface' => 'input-code',
+                'options' => ['language' => 'json'],
+                'width' => 'full'
+            ],
+            'schema' => ['is_nullable' => true]
+        ],
+        [
+            'field' => 'genre_form',
+            'type' => 'json',
+            'meta' => [
+                'interface' => 'input-code',
+                'options' => ['language' => 'json'],
+                'width' => 'full'
+            ],
+            'schema' => ['is_nullable' => true]
+        ],
+        [
+            'field' => 'sab_classification',
+            'type' => 'string',
+            'meta' => ['interface' => 'input', 'width' => 'quarter'],
+            'schema' => ['is_nullable' => true, 'max_length' => 50]
+        ],
+        [
+            'field' => 'contributors',
+            'type' => 'json',
+            'meta' => [
+                'interface' => 'input-code',
+                'options' => ['language' => 'json'],
+                'width' => 'full'
+            ],
+            'schema' => ['is_nullable' => true]
+        ],
+
         // Raw data storage
         [
             'field' => 'raw_data',

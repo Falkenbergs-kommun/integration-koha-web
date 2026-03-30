@@ -34,7 +34,9 @@ This is a PHP-based RSS-to-JSON converter for Falkenbergs bibliotek (Falkenberg 
 - `loadEnv($filePath)` - Simple .env parser without external dependencies
 - `getOAuthToken($oauthUrl, $clientId, $clientSecret)` - OAuth 2.0 client credentials flow
 - `trimMarcPunctuation($str)` - Strip trailing MARC punctuation (; , / .)
-- `getSeriesFromMarc($biblioUrl, $apiToken)` - Fetch series info from MARC 490 fields, returns `[{"name", "volume"?, "issn"?}]|null`
+- `fetchMarcRecord($biblioUrl, $apiToken)` - Fetch MARC-in-JSON record, returns decoded array or null
+- `extractFieldsFromMarc(array $marc)` - Extract multiple fields from MARC record (pure parsing, no I/O): publication_year (264$c/260$c), language_code (008), subjects (650$a), genre_form (655$a), sab_classification (084$a), contributors (700$a), series_title (490)
+- `getSeriesFromMarc($biblioUrl, $apiToken)` - Backward-compatible wrapper: fetches MARC and returns only series_title as `[{"name", "volume"?, "issn"?}]|null`
 - `getBookDataFromApi($biblioId, $apiBaseUrl, $apiToken)` - Fetch 20+ metadata fields per book (series_title via MARC 490 fallback as structured objects)
 - `getItemTypesFromApi($apiBaseUrl, $apiToken)` - Fetch all item types with 6 metadata fields (id, description, parent, image, category, visibility)
 - `getFilteredBibliosFromItems($apiBaseUrl, $apiToken, $itemTypes, $limit)` - Fetch biblios filtered by item_type_id using items endpoint with biblio embedding
@@ -126,6 +128,8 @@ The final JSON includes 20+ metadata fields per book including ISBN, title, auth
 - **`sync_koha_items.php`** – Synkar ~155k exemplar från Koha `/items` till `kft_koha_items`. Streaming-arkitektur med cursor-paginering (`q={"item_id":{">":<id>}}`), automatisk OAuth-tokenförnyelse var 45:e minut, och fallback vid korrupta poster. Stöder `--start-from=N` och `--verbose`.
 - **`DirectusClient.php`** – PHP-klient för Directus REST API (CRUD + bulk-create/delete). Exponerar `getBaseUrl()` och `getToken()` för custom-queries utanför standard-CRUD.
 - **`backfill_series_title.php`** – Engångsscript som hämtar series_title (MARC 490$a) för alla biblios utan serie och sparar som JSON-array i Directus. Stöder `--dry-run`, `--limit=N`, `-v`.
+- **`backfill_marc_fields.php`** – Engångsscript som hämtar publication_year, language_code, subjects_marc, genre_form, sab_classification och contributors från MARC-poster. Default: bara poster utan publication_year; `--force` för alla. Stöder `--dry-run`, `--limit=N`, `-v`.
+- **`add_marc_fields.php`** – Migrationsscript som lägger till nya MARC-fält (language_code, subjects_marc, genre_form, sab_classification, contributors) i befintlig Directus-kollektion.
 - **`cleanup_duplicates.php`** – Rensar dubbletter i `kft_koha_biblios`. Kör med `--dry-run` för förhandsvisning.
 - **`sync_cron.sh`** – Kör alla syncar i sekvens: Branches → Biblios → Items → Holds → Enrich (1000 böcker) → Qdrant vectors (dagligen kl 03:00). Skickar start/success/fail-ping till healthchecks.io med per-steg-payload (nyckeltal som created/updated/errors). Konfigureras via `HEALTHCHECK_SYNC_ID` i `.env`. Exporterar `~/.local/bin` i PATH för att `uv` ska hittas i cron-miljön.
 - **`prepare_embedding_text.php`** – Aggregerar data från alla 4 Directus-kollektioner och bygger strukturerad embedding-text + metadata per biblio. Stöder `--output=json|jsonl|csv`, `--limit=N`, `--biblio-id=N`.
@@ -144,7 +148,9 @@ The final JSON includes 20+ metadata fields per book including ISBN, title, auth
 - **Koha API har korrupta poster** – Vissa items har ogiltiga datumfält (`replacement_price_date` med "Month out of range") som ger HTTP 500. `sync_koha_items.php` hanterar detta med fallback: 500 → 10 → hoppa förbi.
 - **OAuth-tokens löper ut efter ~1h** – Items-synken tar ~2.5h, så token förnyas automatiskt var 45:e minut. Koha returnerar tom array (inte felkod) vid utgången token – tyst fel.
 - **`--start-from` hoppar över soft-delete** – Vid partiell sync kan man inte avgöra vilka poster som saknas i källan, så inactive-markering skippas.
-- **`series_title` är JSON-array av objekt** – Koha REST API returnerar alltid `series_title: null`, men MARC 490 (repeterbart fält) innehåller serieinformation i subfält `$a` (namn), `$v` (volym/del) och `$x` (ISSN). Synken gör ett extra MARC-anrop per ny/ändrad post (inte alla 68k) och lagrar som `[{"name":"...","volume":"del 3"}]` i Directus. MARC-punktuation (avslutande `;` etc) trimmas av `trimMarcPunctuation()`. Qdrant keyword-index lagrar bara serienamnen (utan volume).
+- **MARC-fält extraheras via `fetchMarcRecord()` + `extractFieldsFromMarc()`** – Koha REST API saknar flera viktiga fält (publication_year alltid null, inga ämnesord/genre). Synken hämtar MARC-in-JSON (Accept-header) för varje ny/ändrad post och extraherar: publication_year (264$c/260$c), language_code (008 pos 35-37), subjects_marc (650$a), genre_form (655$a), sab_classification (084$a), contributors (700$a), series_title (490$a/$v/$x). Alla fält trimmas med `trimMarcPunctuation()`. `getSeriesFromMarc()` bevaras som bakåtkompatibel wrapper.
+- **`series_title` är JSON-array av objekt** – MARC 490 (repeterbart fält) innehåller serieinformation i subfält `$a` (namn), `$v` (volym/del) och `$x` (ISSN). Lagras som `[{"name":"...","volume":"del 3"}]` i Directus. Qdrant keyword-index lagrar bara serienamnen (utan volume).
+- **`subjects_marc` (ej `subjects`)** – Undviker namnkonflikt med AI-berikade ämnen i `kft_koha_enriched`. MARC 650$a ger katalogiserade ämnesord, AI-enrichment ger fria taggar/ämnen.
 - **`safeTruncate()` i `common.php`** – Delad multibyte-safe trunkering, används av alla sync-scripts.
 - **`image_cached` och `image_cached_url` skrivs INTE av synken** – dessa fält ägs av webbendpointsen (`common.php`, `latest.php`) som cachar bilder lokalt. Synken skriver dem aldrig, annars nollas cachade bilder varje natt.
 - **Soft delete** – poster som försvinner från Koha markeras `status=inactive`, raderas inte.

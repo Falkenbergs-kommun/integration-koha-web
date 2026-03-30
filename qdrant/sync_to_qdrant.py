@@ -149,6 +149,11 @@ def ensure_collection(client: QdrantClient) -> bool:
         ("tags", PayloadSchemaType.KEYWORD),
         ("branches", PayloadSchemaType.KEYWORD),
         ("series_title", PayloadSchemaType.KEYWORD),
+        ("language_code", PayloadSchemaType.KEYWORD),
+        ("genre_form", PayloadSchemaType.KEYWORD),
+        ("subjects_marc", PayloadSchemaType.KEYWORD),
+        ("sab_classification", PayloadSchemaType.KEYWORD),
+        ("contributors", PayloadSchemaType.KEYWORD),
     ]
 
     for field_name, schema_type in index_configs:
@@ -171,6 +176,27 @@ def ensure_collection(client: QdrantClient) -> bool:
     )
 
     return True
+
+
+def ensure_indexes(client: QdrantClient) -> None:
+    """Skapa saknade payload-index på befintlig collection (idempotent)."""
+    new_indexes = [
+        ("language_code", PayloadSchemaType.KEYWORD),
+        ("genre_form", PayloadSchemaType.KEYWORD),
+        ("subjects_marc", PayloadSchemaType.KEYWORD),
+        ("sab_classification", PayloadSchemaType.KEYWORD),
+        ("contributors", PayloadSchemaType.KEYWORD),
+    ]
+
+    for field_name, schema_type in new_indexes:
+        try:
+            client.create_payload_index(
+                collection_name=COLLECTION_NAME,
+                field_name=field_name,
+                field_schema=schema_type,
+            )
+        except Exception:
+            pass  # Index finns redan
 
 
 # ─── Datahämtning via PHP ────────────────────────────────────────────
@@ -359,6 +385,11 @@ def build_payload(record: dict, hash_val: str) -> dict:
         "catalog_link": meta.get("catalog_link"),
         "image_url": meta.get("image_url"),
         "ean": meta.get("ean"),
+        "language_code": meta.get("language_code"),
+        "subjects_marc": meta.get("subjects_marc", []),
+        "genre_form": meta.get("genre_form", []),
+        "sab_classification": meta.get("sab_classification"),
+        "contributors": meta.get("contributors", []),
         "embedding_text": record.get("embedding_text", ""),
         "content_hash": hash_val,
         "last_synced": datetime.now(timezone.utc).isoformat(),
@@ -404,6 +435,7 @@ def sync(force: bool, limit: int | None, dry_run: bool, verbose: bool) -> None:
         print("  Skapade ny collection med dense + sparse vektorer")
     else:
         print("  Collection finns redan")
+        ensure_indexes(client)
     print()
 
     # 4. Hämta befintligt tillstånd

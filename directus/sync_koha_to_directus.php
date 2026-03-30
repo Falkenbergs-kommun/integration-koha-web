@@ -382,13 +382,29 @@ function main()
                 // Transform data
                 $directusData = transformKohaToDirectus($kohaBook);
 
-                // Hämta serieinfo från MARC 490 (name/volume/issn)
-                if (empty($directusData['series_title'])) {
-                    $marcUrl = rtrim($config['API_BASE_URL'], '/') . '/' . $biblioId;
-                    $marcSeries = getSeriesFromMarc($marcUrl, $kohaToken);
-                    if ($marcSeries !== null) {
-                        $directusData['series_title'] = $marcSeries;
+                // Hämta MARC-data (publication_year, series, ämnesord, genre, m.m.)
+                $marcUrl = rtrim($config['API_BASE_URL'], '/') . '/' . $biblioId;
+                $marcRecord = fetchMarcRecord($marcUrl, $kohaToken);
+
+                if ($marcRecord !== null) {
+                    $marcFields = extractFieldsFromMarc($marcRecord);
+
+                    // publication_year: MARC 264$c/260$c som fallback
+                    if (empty($directusData['publication_year']) && !empty($marcFields['publication_year'])) {
+                        $directusData['publication_year'] = $marcFields['publication_year'];
                     }
+
+                    // series_title: MARC 490 som fallback
+                    if (empty($directusData['series_title']) && !empty($marcFields['series_title'])) {
+                        $directusData['series_title'] = $marcFields['series_title'];
+                    }
+
+                    // Fält som bara finns i MARC (ej i REST API)
+                    if (!empty($marcFields['language_code']))      $directusData['language_code'] = $marcFields['language_code'];
+                    if (!empty($marcFields['subjects']))            $directusData['subjects_marc'] = $marcFields['subjects'];
+                    if (!empty($marcFields['genre_form']))          $directusData['genre_form'] = $marcFields['genre_form'];
+                    if (!empty($marcFields['sab_classification']))  $directusData['sab_classification'] = safeTruncate($marcFields['sab_classification'], 50);
+                    if (!empty($marcFields['contributors']))        $directusData['contributors'] = $marcFields['contributors'];
                 }
 
                 if ($existing) {
