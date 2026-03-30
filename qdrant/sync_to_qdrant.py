@@ -51,6 +51,7 @@ EMBEDDING_MODEL = "text-embedding-3-large"
 DIMENSIONS = 3072
 EMBEDDING_BATCH_SIZE = 100
 QDRANT_UPSERT_BATCH_SIZE = 100
+SYNC_CHUNK_SIZE = 1000
 MAX_RETRIES = 3
 
 # Sökväg till PHP-scriptet (relativt denna fil)
@@ -334,12 +335,8 @@ def embed_dense(texts: list[str], api_key: str, verbose: bool) -> list[list[floa
 # ─── Sparse embeddings (BM25 via fastembed) ──────────────────────────
 
 
-def embed_sparse(texts: list[str], verbose: bool) -> list[SparseVector]:
+def embed_sparse(texts: list[str], model, verbose: bool) -> list[SparseVector]:
     """Generera BM25 sparse vectors lokalt via fastembed."""
-    from fastembed import SparseTextEmbedding
-
-    model = SparseTextEmbedding(model_name="Qdrant/bm25")
-
     if verbose:
         print(f"  Genererar BM25 sparse vectors för {len(texts)} texter...")
 
@@ -482,68 +479,76 @@ def sync(force: bool, limit: int | None, dry_run: bool, verbose: bool) -> None:
             print(f"  Skulle radera biblio_id: {[bid for bid, _ in to_delete[:20]]}")
         return
 
-    # 5. Generera embeddings och upserta
+    # 5. Generera embeddings och upserta i chunkar
     if to_embed:
-        texts = [rec["embedding_text"] for rec, _ in to_embed]
+        from fastembed import SparseTextEmbedding
 
-        print(f"Steg 4/5: Genererar embeddings för {len(to_embed)} poster...")
+        total_chunks = (len(to_embed) - 1) // SYNC_CHUNK_SIZE + 1
+        print(f"Steg 4-5/5: Embed + upsert i {total_chunks} chunkar à {SYNC_CHUNK_SIZE} poster...")
 
-        # Dense embeddings (OpenAI API)
-        dense_vectors = embed_dense(texts, config["OPENAI_API_KEY"], verbose)
+        bm25_model = SparseTextEmbedding(model_name="Qdrant/bm25")
+        total_upserted = 0
 
-        # Sparse embeddings (lokal BM25)
-        sparse_vectors = embed_sparse(texts, verbose)
+        for chunk_start in range(0, len(to_embed), SYNC_CHUNK_SIZE):
+            chunk = to_embed[chunk_start:chunk_start + SYNC_CHUNK_SIZE]
+            chunk_num = chunk_start // SYNC_CHUNK_SIZE + 1
+            texts = [rec["embedding_text"] for rec, _ in chunk]
 
-        print()
-        print("Steg 5/5: Upsertar till Qdrant...")
+            # Dense embeddings (OpenAI API, batchas internt i 100-grupper)
+            dense_vectors = embed_dense(texts, config["OPENAI_API_KEY"], verbose)
 
-        # Bygg punkter
-        points = []
-        for i, (record, hash_val) in enumerate(to_embed):
-            bid = record["biblio_id"]
-            point_id = biblio_id_to_uuid(bid)
-            payload = build_payload(record, hash_val)
+            # Sparse embeddings (lokal BM25, återanvänd modell)
+            sparse_vectors = embed_sparse(texts, bm25_model, verbose)
 
-            points.append(
-                PointStruct(
-                    id=point_id,
-                    vector={
-                        "dense": dense_vectors[i],
-                        "sparse": sparse_vectors[i],
-                    },
-                    payload=payload,
+            # Bygg punkter och upserta direkt
+            points = []
+            for i, (record, hash_val) in enumerate(chunk):
+                points.append(
+                    PointStruct(
+                        id=biblio_id_to_uuid(record["biblio_id"]),
+                        vector={
+                            "dense": dense_vectors[i],
+                            "sparse": sparse_vectors[i],
+                        },
+                        payload=build_payload(record, hash_val),
+                    )
                 )
-            )
 
-        # Upserta i batchar
-        for i in range(0, len(points), QDRANT_UPSERT_BATCH_SIZE):
-            batch = points[i: i + QDRANT_UPSERT_BATCH_SIZE]
-            client.upsert(collection_name=COLLECTION_NAME, points=batch)
-            if verbose:
-                print(f"  Upsertade {min(i + QDRANT_UPSERT_BATCH_SIZE, len(points))}/{len(points)}")
+            for j in range(0, len(points), QDRANT_UPSERT_BATCH_SIZE):
+                client.upsert(
+                    collection_name=COLLECTION_NAME,
+                    points=points[j:j + QDRANT_UPSERT_BATCH_SIZE],
+                )
 
-        print(f"  Upsertade {len(points)} punkter")
+            total_upserted += len(chunk)
+            print(f"  Chunk {chunk_num}/{total_chunks}: {len(chunk)} poster ({total_upserted}/{len(to_embed)} totalt)")
 
-    # Radera borttagna
+        print(f"  Upsertade {total_upserted} punkter")
+
+    # Radera borttagna (hoppa över vid --limit, ofullständig dataset)
     if to_delete:
-        print(f"\nRaderar {len(to_delete)} inaktiva poster...")
-        point_ids = [pid for _, pid in to_delete]
-        client.delete(
-            collection_name=COLLECTION_NAME,
-            points_selector=point_ids,
-        )
-        if verbose:
-            deleted_bids = [bid for bid, _ in to_delete[:10]]
-            print(f"  Raderade biblio_id: {deleted_bids}{'...' if len(to_delete) > 10 else ''}")
+        if limit:
+            print(f"\n  Hoppar över delete ({len(to_delete)} poster, --limit={limit} ger ofullständig dataset)")
+        else:
+            print(f"\nRaderar {len(to_delete)} inaktiva poster...")
+            point_ids = [pid for _, pid in to_delete]
+            client.delete(
+                collection_name=COLLECTION_NAME,
+                points_selector=point_ids,
+            )
+            if verbose:
+                deleted_bids = [bid for bid, _ in to_delete[:10]]
+                print(f"  Raderade biblio_id: {deleted_bids}{'...' if len(to_delete) > 10 else ''}")
 
     # Statistik
+    actually_deleted = len(to_delete) if (to_delete and not limit) else 0
     duration = time.time() - start_time
     print()
     print("=" * 60)
     print("  KLAR")
     print("=" * 60)
     print(f"  Upsertade:  {len(to_embed)}")
-    print(f"  Raderade:   {len(to_delete)}")
+    print(f"  Raderade:   {actually_deleted}")
     print(f"  Oförändrade:{unchanged}")
     print(f"  Tid:        {duration:.1f}s")
     print("=" * 60)
