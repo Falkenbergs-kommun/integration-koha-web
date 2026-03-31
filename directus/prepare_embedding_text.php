@@ -225,10 +225,19 @@ function buildEmbeddingText($biblio, $enriched, $itemAgg, $holdData, $itemTypeLa
 
     // ── Titel och författare ──
     $title = trim($biblio['title'] ?? '');
+    $partNumber = trim($biblio['part_number'] ?? '');
+    $partName = trim($biblio['part_name'] ?? '');
     $subtitle = trim($biblio['subtitle'] ?? '');
     $author = trim($biblio['author'] ?? '');
 
+    // MARC 245-ordning: $a (title) $n (part_number) $p (part_name) $b (subtitle)
     $titleLine = $title;
+    if ($partNumber) {
+        $titleLine .= ' ' . $partNumber;
+    }
+    if ($partName) {
+        $titleLine .= ' ' . $partName;
+    }
     if ($subtitle) {
         $titleLine .= ': ' . $subtitle;
     }
@@ -473,6 +482,8 @@ function buildMetadata($biblio, $enriched, $itemAgg, $holdData, $itemTypeLabels)
     }
 
     // Utökad metadata för Qdrant-payload
+    $meta['part_number'] = $biblio['part_number'] ?? null;
+    $meta['part_name'] = $biblio['part_name'] ?? null;
     $meta['subtitle'] = $biblio['subtitle'] ?? null;
     $meta['publisher'] = $biblio['publisher'] ?? null;
     $meta['publication_place'] = $biblio['publication_place'] ?? null;
@@ -595,7 +606,7 @@ function main()
         $biblioFilter['biblio_id'] = ['_eq' => $args['biblio_id']];
     }
 
-    $biblioFields = 'id,biblio_id,title,subtitle,author,abstract,isbn,isbn_clean,'
+    $biblioFields = 'id,biblio_id,title,part_number,part_name,subtitle,author,abstract,isbn,isbn_clean,'
         . 'publisher,publication_year,publication_place,pages,material_size,'
         . 'edition_statement,series_title,age_restriction,notes,ean,issn,'
         . 'catalog_link,image_url,image_cached_url,serial,copyright_date,'

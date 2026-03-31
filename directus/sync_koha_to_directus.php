@@ -49,6 +49,8 @@ function transformKohaToDirectus($kohaBook)
         'title' => safeTruncate(cleanTitle($kohaBook['title'] ?? null), 500),
         'author' => safeTruncate($kohaBook['author'] ?? null, 255),
         'abstract' => $kohaBook['abstract'] ?? null, // text field, no limit
+        'part_number' => safeTruncate($kohaBook['part_number'] ?? null, 255),
+        'part_name' => safeTruncate($kohaBook['part_name'] ?? null, 255),
         'subtitle' => safeTruncate($kohaBook['subtitle'] ?? null, 500),
 
         // Publication fields

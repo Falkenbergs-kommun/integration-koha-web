@@ -184,6 +184,18 @@ function getFieldDefinitions()
             'schema' => ['is_nullable' => true]
         ],
         [
+            'field' => 'part_number',
+            'type' => 'string',
+            'meta' => ['interface' => 'input', 'width' => 'half'],
+            'schema' => ['is_nullable' => true, 'max_length' => 255]
+        ],
+        [
+            'field' => 'part_name',
+            'type' => 'string',
+            'meta' => ['interface' => 'input', 'width' => 'half'],
+            'schema' => ['is_nullable' => true, 'max_length' => 255]
+        ],
+        [
             'field' => 'subtitle',
             'type' => 'string',
             'meta' => ['interface' => 'input', 'width' => 'full'],

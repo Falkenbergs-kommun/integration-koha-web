@@ -372,6 +372,8 @@ def build_payload(record: dict, hash_val: str) -> dict:
         "tags": meta.get("tags", []),
         "branches": meta.get("branches", []),
         "series_title": meta.get("series_title"),
+        "part_number": meta.get("part_number"),
+        "part_name": meta.get("part_name"),
         "subtitle": meta.get("subtitle"),
         "total_items": meta.get("total_items", 0),
         "available_items": meta.get("available_items", 0),
