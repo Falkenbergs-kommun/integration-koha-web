@@ -391,9 +391,14 @@ function main()
                 if ($marcRecord !== null) {
                     $marcFields = extractFieldsFromMarc($marcRecord);
 
-                    // publication_year: MARC 264$c/260$c som fallback
-                    if (empty($directusData['publication_year']) && !empty($marcFields['publication_year'])) {
+                    // publication_year: MARC-värdet föredras (kan vara bandspecifikt via 245$p)
+                    if (!empty($marcFields['publication_year'])) {
                         $directusData['publication_year'] = $marcFields['publication_year'];
+                    }
+
+                    // publication_period: datumintervall från 260$c/264$c (t.ex. "1967-1991")
+                    if (!empty($marcFields['publication_period'])) {
+                        $directusData['publication_period'] = $marcFields['publication_period'];
                     }
 
                     // series_title: MARC 490 som fallback

@@ -216,6 +216,12 @@ function getFieldDefinitions()
             'schema' => ['is_nullable' => true, 'max_length' => 50]
         ],
         [
+            'field' => 'publication_period',
+            'type' => 'string',
+            'meta' => ['interface' => 'input', 'width' => 'quarter'],
+            'schema' => ['is_nullable' => true, 'max_length' => 20]
+        ],
+        [
             'field' => 'publication_place',
             'type' => 'string',
             'meta' => ['interface' => 'input', 'width' => 'quarter'],

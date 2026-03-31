@@ -159,6 +159,9 @@ function main()
             $update['publication_year'] = $marcFields['publication_year'];
             $stats['pub_year_found']++;
         }
+        if (!empty($marcFields['publication_period'])) {
+            $update['publication_period'] = $marcFields['publication_period'];
+        }
         if (!empty($marcFields['language_code'])) {
             $update['language_code'] = $marcFields['language_code'];
             $stats['language_found']++;

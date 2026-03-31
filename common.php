@@ -97,12 +97,13 @@ function fetchMarcRecord($biblioUrl, $apiToken) {
 }
 
 // Extrahera flera fält från en MARC-post (ren parsning, ingen I/O)
-// Returnerar associativ array med: series_title, publication_year, language_code,
-// subjects, genre_form, sab_classification, contributors
+// Returnerar associativ array med: series_title, publication_year, publication_period,
+// language_code, subjects, genre_form, sab_classification, contributors
 function extractFieldsFromMarc(array $marc) {
     $result = [
         'series_title' => null,
         'publication_year' => null,
+        'publication_period' => null,
         'language_code' => null,
         'subjects' => [],
         'genre_form' => [],
@@ -129,9 +130,20 @@ function extractFieldsFromMarc(array $marc) {
 
     $pubYear264 = null;
     $pubYear260 = null;
+    $partName245p = null;
     $series = [];
 
     foreach ($marc['fields'] as $field) {
+        // MARC 245$p: deltitel (part name) — kan innehålla bandets utgivningsår
+        if (isset($field['245']['subfields']) && $partName245p === null) {
+            foreach ($field['245']['subfields'] as $sf) {
+                if (isset($sf['p'])) {
+                    $partName245p = $sf['p'];
+                    break;
+                }
+            }
+        }
+
         // MARC 084$a: SAB-klassifikation (ta första förekomsten)
         if (isset($field['084']['subfields']) && $result['sab_classification'] === null) {
             foreach ($field['084']['subfields'] as $sf) {
@@ -211,9 +223,23 @@ function extractFieldsFromMarc(array $marc) {
         }
     }
 
-    // Utgivningsår: föredra 264$c (RDA), fallback 260$c
+    // Utgivningsår: föredra bandets år (245$p) → 264$c (RDA) → 260$c
     $rawYear = $pubYear264 ?? $pubYear260;
-    if ($rawYear !== null && preg_match('/(19|20)\d{2}/', $rawYear, $m)) {
+
+    // Spara utgivningsperiod om 260$c/264$c innehåller ett datumintervall (t.ex. "1967-1991")
+    if ($rawYear !== null && preg_match('/((?:19|20)\d{2})\s*-\s*((?:19|20)\d{2})/', $rawYear, $periodMatch)) {
+        $result['publication_period'] = $periodMatch[1] . '-' . $periodMatch[2];
+    }
+
+    // 245$p som innehåller ett fristående årtal (t.ex. "1987 : ") anger bandets utgivningsår
+    $partYearFound = false;
+    if ($partName245p !== null && preg_match('/^\s*((?:19|20)\d{2})\s*[;:,.\/ ]*$/', $partName245p, $pm)) {
+        $result['publication_year'] = $pm[1];
+        $partYearFound = true;
+    }
+
+    // Fallback: första fyrsiffriga årtalet från 264$c/260$c
+    if (!$partYearFound && $rawYear !== null && preg_match('/(19|20)\d{2}/', $rawYear, $m)) {
         $result['publication_year'] = $m[0];
     }
 
