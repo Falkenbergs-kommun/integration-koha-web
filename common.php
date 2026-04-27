@@ -671,7 +671,7 @@ function safeTruncate($value, $maxLength)
     return $value;
 }
 
-function getFilteredBibliosFromItems($apiBaseUrl, $apiToken, $itemTypes = [], $limit = 10) {
+function getFilteredBibliosFromItems($apiBaseUrl, $apiToken, $itemTypes = [], $limit = 10, $locations = [], $ccodes = []) {
     // Bygg URL - API-endpoint för items
     // API_BASE_URL pekar till /biblios/, men items är på samma nivå
     $baseApiUrl = preg_replace('#/biblios/?$#', '', $apiBaseUrl);
@@ -689,11 +689,14 @@ function getFilteredBibliosFromItems($apiBaseUrl, $apiToken, $itemTypes = [], $l
     $queryParts[] = '_per_page=' . urlencode($perPage);
     $queryParts[] = '_order_by=' . urlencode($orderBy);
 
-    // Bygg JSON query för item_type_id filter (OR-logik via array)
-    if (!empty($itemTypes)) {
-        // Skapa JSON query: {"item_type_id": ["BOK", "DVD"]}
-        $qFilter = json_encode(['item_type_id' => $itemTypes]);
-        $queryParts[] = 'q=' . urlencode($qFilter);
+    // Bygg JSON query med implicit AND mellan fält, OR inom varje array.
+    // ccode mappas till Kohas riktiga fältnamn collection_code här.
+    $qFilter = [];
+    if (!empty($itemTypes)) $qFilter['item_type_id']    = $itemTypes;
+    if (!empty($locations)) $qFilter['location']        = $locations;
+    if (!empty($ccodes))    $qFilter['collection_code'] = $ccodes;
+    if (!empty($qFilter)) {
+        $queryParts[] = 'q=' . urlencode(json_encode($qFilter));
     }
 
     // Bygg URL med query string

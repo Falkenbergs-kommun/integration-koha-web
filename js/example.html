@@ -80,6 +80,46 @@
                  data-max-books="8"></div>
         </div>
 
+        <hr class="uk-divider-icon">
+
+        <!-- Exempel 6: Filter på avdelning -->
+        <div class="uk-section">
+            <h2 class="uk-h3">Exempel 6: Senaste från gymnasie-avdelningen</h2>
+            <p class="uk-text-muted">Filtrering på <code>data-ccode="GYMN"</code></p>
+            <div class="koha-shelf"
+                 data-source="latest"
+                 data-ccode="GYMN"
+                 data-columns="4"
+                 data-max-books="8"></div>
+        </div>
+
+        <hr class="uk-divider-icon">
+
+        <!-- Exempel 7: Filter på placering -->
+        <div class="uk-section">
+            <h2 class="uk-h3">Exempel 7: Senaste från magasinet</h2>
+            <p class="uk-text-muted">Filtrering på <code>data-location="MAG"</code></p>
+            <div class="koha-shelf"
+                 data-source="latest"
+                 data-location="MAG"
+                 data-columns="4"
+                 data-max-books="8"></div>
+        </div>
+
+        <hr class="uk-divider-icon">
+
+        <!-- Exempel 8: Kombinerat filter -->
+        <div class="uk-section">
+            <h2 class="uk-h3">Exempel 8: Kombinerat filter</h2>
+            <p class="uk-text-muted">Barnböcker på barnavdelningen: <code>data-item-types="BARNBOK" data-ccode="BARN"</code></p>
+            <div class="koha-shelf"
+                 data-source="latest"
+                 data-item-types="BARNBOK"
+                 data-ccode="BARN"
+                 data-columns="4"
+                 data-max-books="8"></div>
+        </div>
+
         <hr class="uk-margin-large">
 
         <!-- Instruktioner -->
@@ -120,6 +160,21 @@
                             <td><code>data-shelf-id</code></td>
                             <td>nummer</td>
                             <td><strong>Obligatoriskt för shelf.</strong> ID för bokhyllan</td>
+                        </tr>
+                        <tr>
+                            <td><code>data-item-types</code></td>
+                            <td>kommaseparerat</td>
+                            <td>Filtrera på item-typer, t.ex. "BARNBOK,BARNDVD". Endast med <code>data-source="latest"</code>.</td>
+                        </tr>
+                        <tr>
+                            <td><code>data-location</code></td>
+                            <td>kommaseparerat</td>
+                            <td>Filtrera på fysisk placering, t.ex. "MAG,SVSPRAK". Endast med <code>data-source="latest"</code>.</td>
+                        </tr>
+                        <tr>
+                            <td><code>data-ccode</code></td>
+                            <td>kommaseparerat</td>
+                            <td>Filtrera på samlings-/avdelningskod, t.ex. "GYMN,VUX,BARN". Endast med <code>data-source="latest"</code>.</td>
                         </tr>
                         <tr>
                             <td><code>data-columns</code></td>

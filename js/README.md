@@ -9,7 +9,7 @@ JavaScript-widget för att visa Koha-bokhyllor som UIkit 3 cards i Yootheme Pro 
 - ✅ Responsiv grid-layout (2-6 kolumner)
 - ✅ Karusell/slider-läge med touch-stöd
 - ✅ Anpassningsbara kortstorlekar
-- ✅ Filtrering på item-typer (t.ex. BARNBOK, BARNDVD)
+- ✅ Filtrering på item-typer, placering och avdelning (t.ex. BARNBOK, MAG, GYMN)
 - ✅ Valfri visning av bokbeskrivningar (abstract)
 - ✅ Automatisk API-URL detektering
 - ✅ Lazy loading av bilder
@@ -93,7 +93,9 @@ Byt ut `"1"` mot ditt shelf-id.
 |----------|-----|----------|-------------|
 | `data-source` | string | shelf | Källa: `shelf` (bokhylla) eller `latest` (senaste inköp) |
 | `data-shelf-id` | number | - | **Obligatoriskt för shelf.** ID för bokhyllan från Koha |
-| `data-item-types` | string | - | Filtrera senaste böcker på item-typer (kommaseparerat, t.ex. "BARNBOK,BARNDVD") |
+| `data-item-types` | string | - | Filtrera senaste böcker på item-typer (kommaseparerat, t.ex. "BARNBOK,BARNDVD"). Endast med `data-source="latest"`. |
+| `data-location` | string | - | Filtrera på fysisk placering (kommaseparerat, t.ex. "MAG,SVSPRAK"). Endast med `data-source="latest"`. |
+| `data-ccode` | string | - | Filtrera på samlings-/avdelningskod (kommaseparerat, t.ex. "GYMN,VUX,BARN"). Endast med `data-source="latest"`. |
 | `data-display-mode` | string | grid | Visningsläge: `grid` eller `slider` (karusell) |
 | `data-show-abstract` | boolean | true | Visa bokbeskrivningar. Sätt till `false` för att dölja |
 | `data-columns` | number | 3 | Antal kolumner i grid eller synliga objekt i slider (2, 3, 4, 5, eller 6) |
@@ -149,6 +151,28 @@ Byt ut `"1"` mot ditt shelf-id.
 ```html
 <div class="koha-shelf" data-source="latest" data-item-types="BARNDVD,BARNBOK" data-columns="4" data-max-books="8"></div>
 ```
+
+**Visa senaste böcker från magasinet (placering MAG):**
+```html
+<div class="koha-shelf" data-source="latest" data-location="MAG"></div>
+```
+
+**Visa senaste böcker från gymnasie-avdelningen:**
+```html
+<div class="koha-shelf" data-source="latest" data-ccode="GYMN"></div>
+```
+
+**Kombinerat filter – senaste barnböcker på barnavdelningen:**
+```html
+<div class="koha-shelf" data-source="latest" data-item-types="BARNBOK" data-ccode="BARN"></div>
+```
+
+**Flera placeringar (OR-logik) – böcker från magasin eller svenska språk:**
+```html
+<div class="koha-shelf" data-source="latest" data-location="MAG,SVSPRAK"></div>
+```
+
+> **Notera om filtren:** `data-item-types`, `data-location` och `data-ccode` kan kombineras fritt. Inom samma attribut är logiken OR (komma-separerade värden), mellan attribut är logiken AND (boken måste matcha alla angivna filter). Värdena är skiftlägesokänsliga – `mag` och `MAG` ger samma resultat. Filtren gäller endast `data-source="latest"`; för shelf-källan används en hårdkodad lista där filtrering inte är meningsfull.
 
 ### Exempel med slider/karusell
 

@@ -19,6 +19,26 @@ if (isset($_GET['item_type_id']) && !empty(trim($_GET['item_type_id']))) {
     sort($itemTypeIds); // Normalisera ordning för konsistenta cache-nycklar
 }
 
+// Hämta och validera location filter (kommaseparerad lista, samma mönster som item_type_id)
+$locations = [];
+if (isset($_GET['location']) && !empty(trim($_GET['location']))) {
+    $locations = array_filter(
+        array_map('trim', array_map('strtoupper', explode(',', $_GET['location']))),
+        function($v) { return !empty($v); }
+    );
+    sort($locations);
+}
+
+// Hämta och validera ccode filter (kommaseparerad lista, mappas till collection_code i common.php)
+$ccodes = [];
+if (isset($_GET['ccode']) && !empty(trim($_GET['ccode']))) {
+    $ccodes = array_filter(
+        array_map('trim', array_map('strtoupper', explode(',', $_GET['ccode']))),
+        function($v) { return !empty($v); }
+    );
+    sort($ccodes);
+}
+
 // Validera format
 if (!in_array($format, ['json', 'xml'])) {
     $format = 'json';
@@ -33,9 +53,13 @@ if ($format === 'xml') {
 header('Access-Control-Allow-Origin: *');
 header('Cache-Control: no-cache, must-revalidate');
 
-// Cache-fil baserat på format, antal och item_type_id filter
+// Cache-fil baserat på format, antal och aktiva filter.
+// Tomma suffix bevarar befintliga cache-nycklar oförändrade (bakåtkompatibilitet).
+// Prefixen _loc_ och _cc_ undviker krock om samma värde (t.ex. "BARN") finns i flera filter.
 $itemTypeSuffix = empty($itemTypeIds) ? '' : '_' . implode('_', $itemTypeIds);
-$cacheFile = __DIR__ . "/cache/cache_latest_{$limit}_{$format}{$itemTypeSuffix}.cache";
+$locationSuffix = empty($locations)   ? '' : '_loc_' . implode('_', $locations);
+$ccodeSuffix    = empty($ccodes)      ? '' : '_cc_'  . implode('_', $ccodes);
+$cacheFile = __DIR__ . "/cache/cache_latest_{$limit}_{$format}{$itemTypeSuffix}{$locationSuffix}{$ccodeSuffix}.cache";
 $cacheMaxAge = intval(getenv('CACHE_TTL_LATEST') ?: 3600); // Standard 1 timme
 
 // Säkerställ att cache-katalogen finns
@@ -66,8 +90,9 @@ if (!$apiToken) {
     exit;
 }
 
-// Hämta biblios - olika strategi beroende på om filtrering används
-if (empty($itemTypeIds)) {
+// Hämta biblios - olika strategi beroende på om någon filtrering används
+$hasFilters = !empty($itemTypeIds) || !empty($locations) || !empty($ccodes);
+if (!$hasFilters) {
     // Ingen filtrering - använd direkt biblios endpoint (snabbast)
     $bibliosUrl = rtrim($apiBaseUrl, '/') . '?_order_by=-biblio_id&_per_page=' . $limit;
 
@@ -100,8 +125,8 @@ if (empty($itemTypeIds)) {
 
     $biblios = json_decode($response, true);
 } else {
-    // Filtrering på item_type_id - använd items endpoint med biblio embed
-    $biblios = getFilteredBibliosFromItems($apiBaseUrl, $apiToken, $itemTypeIds, $limit);
+    // Filtrering på item_type_id, location och/eller ccode - använd items endpoint med biblio embed
+    $biblios = getFilteredBibliosFromItems($apiBaseUrl, $apiToken, $itemTypeIds, $limit, $locations, $ccodes);
 }
 
 // Validera resultat

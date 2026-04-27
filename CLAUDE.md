@@ -12,7 +12,7 @@ This is a PHP-based RSS-to-JSON converter for Falkenbergs bibliotek (Falkenberg 
 
 - **index.php**: Single-list endpoint (hardcoded to list 247) - fetches RSS, enriches with API data, caches result
 - **list.php**: Dynamic multi-list endpoint - accepts `?id=XXX` parameter to fetch any library list
-- **latest.php**: Latest books endpoint - fetches newest biblios, supports optional `?item_type_id=TYPE1,TYPE2` filtering
+- **latest.php**: Latest books endpoint - fetches newest biblios, supports optional filtering on `?item_type_id=TYPE1,TYPE2`, `?location=MAG,SVSPRAK` (Kohas placering), and `?ccode=GYMN,VUX` (Kohas collection_code/avdelning). Filter kombineras: OR inom fält, AND mellan fält. Värden är skiftlägesokänsliga (normaliseras till uppercase).
 - **item-types.php**: Item types listing endpoint - fetches all available item types from Koha API with no caching
 - **common.php**: Shared utilities library containing all reusable functions
 - **debug.php**: Development tool for inspecting raw RSS feed responses and debugging XML parsing issues
@@ -39,7 +39,7 @@ This is a PHP-based RSS-to-JSON converter for Falkenbergs bibliotek (Falkenberg 
 - `getSeriesFromMarc($biblioUrl, $apiToken)` - Backward-compatible wrapper: fetches MARC and returns only series_title as `[{"name", "volume"?, "issn"?}]|null`
 - `getBookDataFromApi($biblioId, $apiBaseUrl, $apiToken)` - Fetch 20+ metadata fields per book (series_title via MARC 490 fallback as structured objects)
 - `getItemTypesFromApi($apiBaseUrl, $apiToken)` - Fetch all item types with 6 metadata fields (id, description, parent, image, category, visibility)
-- `getFilteredBibliosFromItems($apiBaseUrl, $apiToken, $itemTypes, $limit)` - Fetch biblios filtered by item_type_id using items endpoint with biblio embedding
+- `getFilteredBibliosFromItems($apiBaseUrl, $apiToken, $itemTypes, $limit, $locations = [], $ccodes = [])` - Fetch biblios filtered by item_type_id, location och/eller collection_code via items endpoint med biblio embedding. ccode-parametern mappas internt till Kohas riktiga fältnamn `collection_code`. Q-parametern bygger AND mellan filter-fält och OR inom varje array.
 - `extractBiblioId($url)` - Parse biblionumber from Koha URLs using regex
 - `getFirstIsbn($isbnString)` - Extract first ISBN from pipe/comma-separated lists
 - `getImageUrl($isbn)` - Build Syndetics image URL from ISBN
@@ -75,10 +75,10 @@ See `.env.example` for template and `docs/GEMINI_ENRICHMENT.md` for detailed set
 
 ## Caching Strategy
 
-- **JSON response cache**: `cache.json` (index.php), `cache_list_{id}.json` (list.php), or `cache_latest_{limit}_{format}_{itemtypes}.cache` (latest.php) - 1 hour TTL
+- **JSON response cache**: `cache.json` (index.php), `cache_list_{id}.json` (list.php), or `cache_latest_{limit}_{format}{_itemtypes}{_loc_locations}{_cc_ccodes}.cache` (latest.php) - 1 hour TTL
 - **Image cache**: `images/{isbn}.jpg` - persistent, never expires
 - **Cache invalidation**: Automatic after 1 hour via filemtime check
-- **Filter-based caching**: Each unique item_type_id combination gets separate cache file (e.g., `cache_latest_10_json_BARNBOK_BARNDVD.cache`)
+- **Filter-based caching**: Varje unik filter-kombination får separat cache-fil. Exempel: `cache_latest_10_json_BARNBOK_BARNDVD.cache`, `cache_latest_10_json_loc_MAG.cache`, `cache_latest_10_json_BARNBOK_loc_MAG_cc_BARN.cache`. Tomma filter ger tom suffix-sträng – cache-nycklar utan location/ccode förblir bakåtkompatibla med pre-2026-04 versioner.
 
 ## Development Commands
 

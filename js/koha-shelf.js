@@ -72,13 +72,21 @@
         if (source === 'latest') {
             url = `${apiUrl}/latest.php`;
 
-            // Add item-types filter if specified
+            // Bygg query-string iterativt så bara satta filter inkluderas.
+            // Saknade attribut ger samma URL som tidigare versioner (bakåtkompat).
+            const params = new URLSearchParams();
+
             const itemTypes = container.getAttribute('data-item-types');
-            if (itemTypes) {
-                const params = new URLSearchParams();
-                params.append('item_type_id', itemTypes);
-                url += '?' + params.toString();
-            }
+            if (itemTypes) params.append('item_type_id', itemTypes);
+
+            const location = container.getAttribute('data-location');
+            if (location) params.append('location', location);
+
+            const ccode = container.getAttribute('data-ccode');
+            if (ccode) params.append('ccode', ccode);
+
+            const qs = params.toString();
+            if (qs) url += '?' + qs;
         } else {
             url = `${apiUrl}/shelf.php?shelfnumber=${encodeURIComponent(shelfId)}`;
         }

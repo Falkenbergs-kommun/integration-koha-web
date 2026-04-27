@@ -139,6 +139,26 @@ https://bibliotek.falkenberg.se/fbg_apps/services/koha/latest.php?format=xml
 https://bibliotek.falkenberg.se/fbg_apps/services/koha/latest.php?limit=20&format=xml
 ```
 
+**Filtrering (kommaseparerade värden, OR inom fält och AND mellan fält):**
+```bash
+# Filter på item-typ (t.ex. bara barnböcker)
+https://bibliotek.falkenberg.se/fbg_apps/services/koha/latest.php?item_type_id=BARNBOK
+
+# Filter på fysisk placering (t.ex. magasinet)
+https://bibliotek.falkenberg.se/fbg_apps/services/koha/latest.php?location=MAG
+
+# Filter på avdelning/samlingskod (gymnasie / vuxen / barn)
+https://bibliotek.falkenberg.se/fbg_apps/services/koha/latest.php?ccode=GYMN
+
+# Kombinerat: barnböcker på barnavdelningen
+https://bibliotek.falkenberg.se/fbg_apps/services/koha/latest.php?item_type_id=BARNBOK&ccode=BARN
+
+# Flera värden: böcker från magasin eller svenska språk
+https://bibliotek.falkenberg.se/fbg_apps/services/koha/latest.php?location=MAG,SVSPRAK
+```
+
+Filterparametrarna är skiftlägesokänsliga (`mag` = `MAG`). Varje unik filterkombination cachas separat i 1 timme.
+
 #### 5. **book.php** - Hämta data om en enskild bok (NYTT)
 
 **JSON-format (default):**
@@ -171,6 +191,9 @@ https://bibliotek.falkenberg.se/fbg_apps/services/koha/debug.php
 | `format` | json, xml | json | Svarsformat (shelf.php, latest.php, book.php) |
 | `id` | integer | - | List-ID (endast list.php) |
 | `limit` | integer | 10 | Antal böcker, max 50 (endast latest.php) |
+| `item_type_id` | string (kommaseparerat) | - | Filter på item-typ, t.ex. "BARNBOK,BARNDVD" (endast latest.php) |
+| `location` | string (kommaseparerat) | - | Filter på fysisk placering, t.ex. "MAG,SVSPRAK" (endast latest.php) |
+| `ccode` | string (kommaseparerat) | - | Filter på samlings-/avdelningskod, t.ex. "GYMN,VUX,BARN" (endast latest.php) |
 
 ## JavaScript Widget för Yootheme Pro / Joomla
 
