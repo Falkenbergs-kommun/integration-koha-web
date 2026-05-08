@@ -213,10 +213,12 @@ def enrich_book(
         enrichment = BookEnrichment.model_validate_json(response.text)
         grounding = extract_grounding(response)
         cost = calculate_cost(response, model)
-        return enrichment, grounding, cost
+        return enrichment, grounding, cost, False
     except Exception as exc:
         print(f"  ⚠  Error enriching '{title}': {exc}", file=sys.stderr)
-        return None, {"search_queries": [], "sources": []}, 0.0
+        err_str = str(exc)
+        is_quota_err = "429" in err_str or "RESOURCE_EXHAUSTED" in err_str
+        return None, {"search_queries": [], "sources": []}, 0.0, is_quota_err
 
 
 # ── Pipeline ──────────────────────────────────────────────────────────────
@@ -229,8 +231,12 @@ def run_enrichment_pipeline(
     directus_url: str,
     directus_token: str,
     dry_run: bool = False
-) -> None:
-    """Main pipeline: fetch → filter → enrich → save."""
+) -> dict:
+    """Main pipeline: fetch → filter → enrich → save.
+
+    Returns a summary dict so the caller can decide exit code based on the
+    success/failure ratio. Empty dict means no work was needed.
+    """
 
     print("=" * 60)
     print("Book Enrichment Pipeline: Directus → Gemini → Directus")
@@ -258,7 +264,7 @@ def run_enrichment_pipeline(
 
     if not to_enrich:
         print("✓ No biblios to enrich. All done!")
-        return
+        return {}
 
     # Step 3: Enrich books
     print(f"[3/4] Enriching {len(to_enrich)} books with Gemini API...")
@@ -266,6 +272,7 @@ def run_enrichment_pipeline(
 
     success_count = 0
     error_count = 0
+    quota_error_count = 0
     total_cost = 0.0
 
     for i, book in enumerate(to_enrich, 1):
@@ -277,11 +284,13 @@ def run_enrichment_pipeline(
         print(f"      {title} ({author})")
 
         # Enrich with Gemini
-        enrichment, grounding, cost_usd = enrich_book(gemini_client, model, book)
+        enrichment, grounding, cost_usd, is_quota_err = enrich_book(gemini_client, model, book)
 
         if not enrichment:
             print(f"      ✗ Enrichment failed")
             error_count += 1
+            if is_quota_err:
+                quota_error_count += 1
             continue
 
         # Preview enrichment
@@ -332,10 +341,19 @@ def run_enrichment_pipeline(
     print(f"✓ Successfully enriched: {success_count}")
     if error_count > 0:
         print(f"✗ Errors: {error_count}")
+    if quota_error_count > 0:
+        print(f"⚠  Gemini quota (429 RESOURCE_EXHAUSTED): {quota_error_count}")
     print(f"💰 Total cost: ${total_cost:.6f} USD")
     if success_count > 0:
         print(f"   Average cost per book: ${total_cost/success_count:.6f} USD")
     print()
+
+    return {
+        'success_count': success_count,
+        'error_count': error_count,
+        'quota_error_count': quota_error_count,
+        'total_cost': total_cost,
+    }
 
 
 # ── CLI ───────────────────────────────────────────────────────────────────
@@ -385,7 +403,7 @@ def main() -> None:
         print("ERROR: DIRECTUS_API_URL or DIRECTUS_API_TOKEN not found in .env", file=sys.stderr)
         sys.exit(1)
 
-    run_enrichment_pipeline(
+    summary = run_enrichment_pipeline(
         limit=args.limit,
         model=args.model,
         delay=args.delay,
@@ -394,6 +412,11 @@ def main() -> None:
         directus_token=directus_token,
         dry_run=args.dry_run
     )
+
+    # Exit non-zero if more books failed than succeeded — gives Healthchecks a fail signal
+    # when Gemini quota is exhausted or another systemic issue is hitting the batch.
+    if summary and summary['error_count'] > summary['success_count']:
+        sys.exit(1)
 
 
 if __name__ == "__main__":

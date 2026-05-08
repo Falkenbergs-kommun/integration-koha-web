@@ -161,7 +161,7 @@ if [ -d "$ENRICH_DIR" ]; then
 
     echo "$enrich_output" >> "$LOG_FILE"
 
-    enrich_stats=$(echo "$enrich_output" | grep -E '(Enriched|Skipped|Errors|Total|Cost|books)' | sed 's/^[[:space:]]*//' | head -5)
+    enrich_stats=$(echo "$enrich_output" | grep -iE '(Successfully|Enriched|Skipped|Errors?|Total|Cost|books?|RESOURCE_EXHAUSTED|quota|429)' | sed 's/^[[:space:]]*//' | head -10)
 
     if [ $enrich_exit -eq 0 ]; then
         echo "[$STEP_TIMESTAMP] Enrich metadata: SUCCESS" >> "$LOG_FILE"
