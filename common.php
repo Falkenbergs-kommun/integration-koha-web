@@ -396,7 +396,7 @@ function cacheImage($isbn, $syndeticsUrl) {
         return null;
     }
 
-    $imageDir = __DIR__ . '/images';
+    $imageDir = __DIR__ . '/public/images';
     $imageFilename = $isbn . '.jpg';
     $imagePath = $imageDir . '/' . $imageFilename;
     $imageWebPath = 'images/' . $imageFilename;
@@ -434,6 +434,101 @@ function cacheImage($isbn, $syndeticsUrl) {
     }
 
     return null;
+}
+
+// Härled Kohas bashost (scheme://host[:port]) från API_BASE_URL.
+// API_BASE_URL pekar på .../api/v1/biblios/ — opac-image.pl ligger däremot
+// under /cgi-bin/koha/ på samma värd.
+function kohaHostFromApiUrl($apiBaseUrl) {
+    $parts = parse_url($apiBaseUrl ?: '');
+    if (!$parts || empty($parts['scheme']) || empty($parts['host'])) {
+        return null;
+    }
+    $host = $parts['scheme'] . '://' . $parts['host'];
+    if (!empty($parts['port'])) {
+        $host .= ':' . $parts['port'];
+    }
+    return $host;
+}
+
+// Hämta Kohas lokalt uppladdade omslag för ett biblio (används som fallback
+// när ISBN saknas, t.ex. för bokcirkelkassar). Returnerar relativ web-path
+// 'images/bib-{id}.jpg' eller null.
+function fetchKohaLocalCover($biblioId, $kohaHost) {
+    if (!$biblioId || !$kohaHost) {
+        return null;
+    }
+
+    $imageDir = __DIR__ . '/public/images';
+    $imageFilename = 'bib-' . $biblioId . '.jpg';
+    $imagePath = $imageDir . '/' . $imageFilename;
+    $imageWebPath = 'images/' . $imageFilename;
+
+    if (file_exists($imagePath)) {
+        return $imageWebPath;
+    }
+
+    if (!is_dir($imageDir)) {
+        mkdir($imageDir, 0755, true);
+    }
+
+    $url = rtrim($kohaHost, '/') . '/cgi-bin/koha/opac-image.pl?biblionumber=' . urlencode($biblioId) . '&thumbnail=1';
+
+    $ch = curl_init();
+    curl_setopt($ch, CURLOPT_URL, $url);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+    curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
+    curl_setopt($ch, CURLOPT_TIMEOUT, 15);
+    curl_setopt($ch, CURLOPT_USERAGENT, 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36');
+
+    $imageData = curl_exec($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $contentType = curl_getinfo($ch, CURLINFO_CONTENT_TYPE);
+    curl_close($ch);
+
+    // Koha levererar en 43-byte 1x1 transparent GIF som placeholder när inget
+    // lokalt omslag finns. Riktiga uppladdade omslag är alltid PNG eller JPEG.
+    // Filtrera GIF-svar som "inget hittat" för att slippa cacha placeholders.
+    $isPlaceholderGif = stripos($contentType, 'image/gif') !== false;
+    if ($httpCode === 200 && $imageData && strpos($contentType, 'image') !== false && !$isPlaceholderGif) {
+        if (file_put_contents($imagePath, $imageData)) {
+            return $imageWebPath;
+        }
+    }
+
+    return null;
+}
+
+// Resolver för bildtrippeln (image_url, image_cached, image_cached_url).
+// Vid ISBN: kör Syndetics-vägen. Annars: försök Kohas lokala omslag.
+// Returnerar trippel av null om ingen bild kan hittas.
+function resolveBookImage($firstIsbn, $biblioId, $apiBaseUrl, $publicBaseUrl = '') {
+    $imageUrl = null;
+    $cachedImagePath = null;
+
+    if ($firstIsbn) {
+        $imageUrl = getImageUrl($firstIsbn);
+        if ($imageUrl) {
+            $cachedImagePath = cacheImage($firstIsbn, $imageUrl);
+        }
+    } elseif ($biblioId) {
+        $kohaHost = kohaHostFromApiUrl($apiBaseUrl);
+        if ($kohaHost) {
+            $cachedImagePath = fetchKohaLocalCover($biblioId, $kohaHost);
+            if ($cachedImagePath) {
+                $imageUrl = rtrim($kohaHost, '/') . '/cgi-bin/koha/opac-image.pl?biblionumber=' . urlencode($biblioId) . '&thumbnail=1';
+            }
+        }
+    }
+
+    $cachedImageFullUrl = ($cachedImagePath && $publicBaseUrl) ? $publicBaseUrl . $cachedImagePath : null;
+
+    return [
+        'image_url' => $imageUrl,
+        'image_cached' => $cachedImagePath,
+        'image_cached_url' => $cachedImageFullUrl,
+    ];
 }
 
 // Funktion för att hämta RSS-feed
@@ -488,19 +583,9 @@ function processRssFeed($xml, $apiBaseUrl, $apiToken, $baseUrl = '') {
             $bookData = getBookDataFromApi($biblioId, $apiBaseUrl, $apiToken);
         }
 
-        // Extrahera första ISBN och bygg bildURL
+        // Extrahera första ISBN och resolva bildtrippel (Syndetics eller Kohas lokala omslag)
         $firstIsbn = getFirstIsbn($bookData['isbn']);
-        $imageUrl = getImageUrl($firstIsbn);
-
-        // Cacha bilden lokalt
-        $cachedImagePath = null;
-        $cachedImageFullUrl = null;
-        if ($imageUrl) {
-            $cachedImagePath = cacheImage($firstIsbn, $imageUrl);
-            if ($cachedImagePath && $baseUrl) {
-                $cachedImageFullUrl = $baseUrl . $cachedImagePath;
-            }
-        }
+        $image = resolveBookImage($firstIsbn, $biblioId, $apiBaseUrl, $baseUrl);
 
         $result['items'][] = [
             'title' => (string)$item->title,
@@ -526,9 +611,9 @@ function processRssFeed($xml, $apiBaseUrl, $apiToken, $baseUrl = '') {
             'url' => $bookData['url'],
             'ean' => $bookData['ean'],
             'notes' => $bookData['notes'],
-            'image_url' => $imageUrl,
-            'image_cached' => $cachedImagePath,
-            'image_cached_url' => $cachedImageFullUrl
+            'image_url' => $image['image_url'],
+            'image_cached' => $image['image_cached'],
+            'image_cached_url' => $image['image_cached_url']
         ];
     }
 
