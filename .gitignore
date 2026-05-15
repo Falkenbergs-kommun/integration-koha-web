@@ -5,3 +5,6 @@ qdrant/.venv/
 qdrant/uv.lock
 enrich/.venv/
 enrich/uv.lock
+*.log
+*.log.old
+__pycache__/

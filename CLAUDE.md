@@ -8,14 +8,25 @@ This is a PHP-based RSS-to-JSON converter for Falkenbergs bibliotek (Falkenberg 
 
 ## Architecture
 
+### Repository Layout
+
+Webbexponerade filer ligger i **`public/`**. Endast denna katalog symlänkas in i webbroten (`bibliotek.falkenberg.se/fbg_apps/services/koha → public/`). Resten av repot (`common.php`, `cache/`, `directus/`, `enrich/`, `qdrant/`, `setup/`, `docs/`, dev-scripts, `.env`) är inte HTTP-tillgängligt.
+
+Lägg ALLA nya webb-endpoints och statiska resurser i `public/`. Endpoints i `public/` använder `__DIR__ . '/../common.php'`, `__DIR__ . '/../.env'` och `__DIR__ . '/../cache/...'` — de når delade resurser via en nivå upp.
+
 ### Core Components
 
-- **index.php**: Single-list endpoint (hardcoded to list 247) - fetches RSS, enriches with API data, caches result
-- **list.php**: Dynamic multi-list endpoint - accepts `?id=XXX` parameter to fetch any library list
-- **latest.php**: Latest books endpoint - fetches newest biblios, supports optional filtering on `?item_type_id=TYPE1,TYPE2`, `?location=MAG,SVSPRAK` (Kohas placering), and `?ccode=GYMN,VUX` (Kohas collection_code/avdelning). Filter kombineras: OR inom fält, AND mellan fält. Värden är skiftlägesokänsliga (normaliseras till uppercase).
-- **item-types.php**: Item types listing endpoint - fetches all available item types from Koha API with no caching
-- **common.php**: Shared utilities library containing all reusable functions
-- **debug.php**: Development tool for inspecting raw RSS feed responses and debugging XML parsing issues
+- **public/index.php**: Single-list endpoint (hardcoded to list 247) - fetches RSS, enriches with API data, caches result
+- **public/list.php**: Dynamic multi-list endpoint - accepts `?id=XXX` parameter to fetch any library list
+- **public/latest.php**: Latest books endpoint - fetches newest biblios, supports optional filtering on `?item_type_id=TYPE1,TYPE2`, `?location=MAG,SVSPRAK` (Kohas placering), and `?ccode=GYMN,VUX` (Kohas collection_code/avdelning). Filter kombineras: OR inom fält, AND mellan fält. Värden är skiftlägesokänsliga (normaliseras till uppercase).
+- **public/shelf.php**: Shelf-list endpoint - fetches a Koha shelf via RSS (`?shelfnumber=XXX&format=json|xml`), används av JS-widgeten `koha-shelf.js`
+- **public/book.php**: Single-book endpoint - fetches metadata for one biblio (`?biblionumber=XXX&format=json|xml`)
+- **public/item-types.php**: Item types listing endpoint - fetches all available item types from Koha API with no caching
+- **public/js/**: JS-widget-distribution (`koha-shelf.js` + demo)
+- **public/images/**: Lokal bildcache (skrivs av `cacheImage()` i common.php; läses även av Joomla-modulen `mod_fbg_kohasearch/cover.php` direkt från filsystemet)
+- **public/.htaccess**: Defensiv blockering av dotfiler, känsliga filändelser och beroendekataloger
+- **common.php**: Shared utilities library containing all reusable functions (ej webbexponerad)
+- **debug.php**: Development tool for inspecting raw RSS feed responses and debugging XML parsing issues (ej webbexponerad)
 
 ### Data Flow
 
@@ -43,7 +54,7 @@ This is a PHP-based RSS-to-JSON converter for Falkenbergs bibliotek (Falkenberg 
 - `extractBiblioId($url)` - Parse biblionumber from Koha URLs using regex
 - `getFirstIsbn($isbnString)` - Extract first ISBN from pipe/comma-separated lists
 - `getImageUrl($isbn)` - Build Syndetics image URL from ISBN
-- `cacheImage($isbn, $syndeticsUrl)` - Download and locally cache book covers to images/ directory
+- `cacheImage($isbn, $syndeticsUrl)` - Download and locally cache book covers to `public/images/` (note: relativt common.php's plats i repo-roten, så `__DIR__ . '/public/images'`)
 - `fetchRssFeed($rssUrl)` - Robust RSS fetching with cookies and user agent
 - `processRssFeed($xml, $apiBaseUrl, $apiToken)` - Main orchestration function combining all data sources
 
@@ -76,7 +87,7 @@ See `.env.example` for template and `docs/GEMINI_ENRICHMENT.md` for detailed set
 ## Caching Strategy
 
 - **JSON response cache**: `cache.json` (index.php), `cache_list_{id}.json` (list.php), or `cache_latest_{limit}_{format}{_itemtypes}{_loc_locations}{_cc_ccodes}.cache` (latest.php) - 1 hour TTL
-- **Image cache**: `images/{isbn}.jpg` - persistent, never expires
+- **Image cache**: `public/images/{isbn}.jpg` - persistent, never expires
 - **Cache invalidation**: Automatic after 1 hour via filemtime check
 - **Filter-based caching**: Varje unik filter-kombination får separat cache-fil. Exempel: `cache_latest_10_json_BARNBOK_BARNDVD.cache`, `cache_latest_10_json_loc_MAG.cache`, `cache_latest_10_json_BARNBOK_loc_MAG_cc_BARN.cache`. Tomma filter ger tom suffix-sträng – cache-nycklar utan location/ccode förblir bakåtkompatibla med pre-2026-04 versioner.
 
@@ -86,7 +97,7 @@ Since this is a simple PHP project without a build system, development is straig
 
 ```bash
 # Run on PHP's built-in server (development only)
-php -S localhost:8000
+php -S localhost:8000 -t public
 
 # Test single list endpoint
 curl http://localhost/bibliotek/index.php
@@ -117,7 +128,7 @@ The final JSON includes 20+ metadata fields per book including ISBN, title, auth
 - Images are checked before download (file_exists)
 - Content-Type validation ensures real images vs error pages
 - Failed downloads return null, not errors
-- images/ directory is auto-created with 0755 permissions
+- public/images/ directory is auto-created with 0755 permissions
 
 ## Koha → Directus Sync (directus/)
 

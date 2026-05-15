@@ -1,0 +1,21 @@
+# Skydd mot oavsiktlig exponering av känsliga filer.
+# Denna katalog symlänkas in i en publik webroot — en oskyddad fil här blir publik.
+# Reglerna nedan returnerar 404 (dolda) snarare än 403 så att angripare inte kan
+# bekräfta att filen existerar.
+
+# Blockera alla dotfiler (.env, .git, .gitignore, .htaccess, .claude, .idea, ...)
+# Undantag: /.well-known/ behövs för ACME/Let's Encrypt
+RedirectMatch 404 "/\.(?!well-known/)"
+
+# Blockera dolda kataloger och beroendekataloger
+RedirectMatch 404 "/(node_modules|vendor)/"
+
+# Blockera känsliga filändelser
+<FilesMatch "(?i)\.(env|env\..*|sql|bak|backup|swp|swo|swn|orig|tmp|old|log|md|lock|pem|key|crt|p12|pfx|sh|dist|sample|example)$">
+    Require all denied
+</FilesMatch>
+
+# Blockera kända config-/build-filer
+<FilesMatch "(?i)^(composer\.(json|lock|phar)|package(-lock)?\.json|yarn\.lock|Dockerfile|docker-compose\.ya?ml|Gemfile(\.lock)?|Pipfile(\.lock)?|requirements\.txt)$">
+    Require all denied
+</FilesMatch>

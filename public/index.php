@@ -1,30 +1,15 @@
 <?php
 // RSS till JSON-konverterare för Falkenbergs bibliotek med ISBN-hämtning
-require_once __DIR__ . '/common.php';
+require_once __DIR__ . '/../common.php';
 
 // Ladda .env-fil
-loadEnv(__DIR__ . '/.env');
+loadEnv(__DIR__ . '/../.env');
 
-// Hämta parametrar från GET
-$shelfNumber = isset($_GET['shelfnumber']) ? intval($_GET['shelfnumber']) : 247;
-$format = isset($_GET['format']) ? strtolower($_GET['format']) : 'json';
-
-// Validera format
-if (!in_array($format, ['json', 'xml'])) {
-    $format = 'json';
-}
-
-// Sätt Content-Type baserat på format
-if ($format === 'xml') {
-    header('Content-Type: application/xml; charset=utf-8');
-} else {
-    header('Content-Type: application/json; charset=utf-8');
-}
+header('Content-Type: application/json; charset=utf-8');
 header('Access-Control-Allow-Origin: *');
 header('Cache-Control: no-cache, must-revalidate');
 
-// Cache-fil baserat på shelfnumber och format
-$cacheFile = __DIR__ . "/cache/cache_shelf{$shelfNumber}_{$format}.cache";
+$cacheFile = __DIR__ . '/../cache/cache.json';
 $cacheMaxAge = 3600; // Cache i 1 timme
 
 // Kolla om cache finns och är giltig
@@ -33,9 +18,7 @@ if (file_exists($cacheFile) && (time() - filemtime($cacheFile)) < $cacheMaxAge) 
     exit;
 }
 
-// Hämta konfiguration från .env
-$baseUrl = getenv('BASE_URL') ?: 'https://bibliotek.falkenberg.se/fbg_apps/services/koha/';
-$rssUrl = "https://bibliotekskatalog.falkenberg.se/cgi-bin/koha/opac-shelves.pl?rss=1&op=view&shelfnumber={$shelfNumber}";
+$rssUrl = 'https://bibliotekskatalog.falkenberg.se/cgi-bin/koha/opac-shelves.pl?rss=1&op=view&shelfnumber=247';
 $apiBaseUrl = getenv('API_BASE_URL');
 $oauthUrl = getenv('OAUTH_URL');
 $clientId = getenv('CLIENT_ID');
@@ -78,17 +61,13 @@ if (!$apiToken) {
     exit;
 }
 
-// Processa RSS-feed med base URL för bilder
-$result = processRssFeed($xml, $apiBaseUrl, $apiToken, $baseUrl);
+// Processa RSS-feed
+$result = processRssFeed($xml, $apiBaseUrl, $apiToken);
 
-// Generera output baserat på format
-if ($format === 'xml') {
-    $xmlOutput = generateXmlOutput($result);
-    file_put_contents($cacheFile, $xmlOutput);
-    echo $xmlOutput;
-} else {
-    $jsonOutput = json_encode($result, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
-    file_put_contents($cacheFile, $jsonOutput);
-    echo $jsonOutput;
-}
+// Spara till cache
+$jsonOutput = json_encode($result, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
+file_put_contents($cacheFile, $jsonOutput);
+
+// Returnera JSON
+echo $jsonOutput;
 ?>

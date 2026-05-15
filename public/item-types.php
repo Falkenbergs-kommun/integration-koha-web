@@ -1,9 +1,9 @@
 <?php
 // Endpoint för att lista alla item types från Koha API
-require_once __DIR__ . '/common.php';
+require_once __DIR__ . '/../common.php';
 
 // Ladda .env-fil
-loadEnv(__DIR__ . '/.env');
+loadEnv(__DIR__ . '/../.env');
 
 // Sätt headers
 header('Content-Type: application/json; charset=utf-8');

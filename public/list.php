@@ -1,9 +1,9 @@
 <?php
 // RSS till JSON-konverterare med dynamisk lista via GET-parameter
-require_once __DIR__ . '/common.php';
+require_once __DIR__ . '/../common.php';
 
 // Ladda .env-fil
-loadEnv(__DIR__ . '/.env');
+loadEnv(__DIR__ . '/../.env');
 
 header('Content-Type: application/json; charset=utf-8');
 header('Access-Control-Allow-Origin: *');
@@ -32,7 +32,7 @@ if (!is_numeric($listId)) {
 }
 
 // Cache-fil baserad på lista-ID
-$cacheFile = __DIR__ . '/cache/cache_list_' . $listId . '.json';
+$cacheFile = __DIR__ . '/../cache/cache_list_' . $listId . '.json';
 $cacheMaxAge = 3600; // Cache i 1 timme
 
 // Kolla om cache finns och är giltig
