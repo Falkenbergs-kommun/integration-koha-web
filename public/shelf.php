@@ -1,5 +1,8 @@
 <?php
-// RSS till JSON-konverterare för Falkenbergs bibliotek med ISBN-hämtning
+// RSS till JSON-konverterare för Falkenbergs bibliotek.
+// Directus-first: RSS:en ger hyllmedlemskap (enda Koha-anropet), all bokmetadata
+// hämtas i bulk från Directus och omslag från lokal bildcache. Vid Koha-fel
+// serveras senast kända goda snapshot (HTTP 200 + stale: true).
 require_once __DIR__ . '/../common.php';
 
 // Ladda .env-fil
@@ -23,8 +26,16 @@ if ($format === 'xml') {
 header('Access-Control-Allow-Origin: *');
 header('Cache-Control: no-cache, must-revalidate');
 
-// Cache-fil baserat på shelfnumber och format
-$cacheFile = __DIR__ . "/../cache/cache_shelf{$shelfNumber}_{$format}.cache";
+// Säkerställ att cache-katalogen finns
+$cacheDir = __DIR__ . '/../cache';
+if (!is_dir($cacheDir)) {
+    mkdir($cacheDir, 0755, true);
+}
+
+// Cache-fil (1h TTL), last-known-good-snapshot och fail-throttle-flagga
+$cacheFile = "{$cacheDir}/cache_shelf{$shelfNumber}_{$format}.cache";
+$snapshotFile = "{$cacheDir}/snapshot_shelf{$shelfNumber}_{$format}.cache";
+$failFlagFile = "{$cacheDir}/fail_shelf{$shelfNumber}.flag";
 $cacheMaxAge = 3600; // Cache i 1 timme
 
 // Kolla om cache finns och är giltig
@@ -36,59 +47,83 @@ if (file_exists($cacheFile) && (time() - filemtime($cacheFile)) < $cacheMaxAge) 
 // Hämta konfiguration från .env
 $baseUrl = getenv('BASE_URL') ?: 'https://bibliotek.falkenberg.se/fbg_apps/services/koha/';
 $rssUrl = "https://bibliotekskatalog.falkenberg.se/cgi-bin/koha/opac-shelves.pl?rss=1&op=view&shelfnumber={$shelfNumber}";
-$apiBaseUrl = getenv('API_BASE_URL');
-$oauthUrl = getenv('OAUTH_URL');
-$clientId = getenv('CLIENT_ID');
-$clientSecret = getenv('CLIENT_SECRET');
 
-// Hämta RSS-feed
+// Fail-throttle: vid nyligt Koha-fel, gå direkt på snapshot utan nytt försök
+// (undviker att hamra ImCodes server under utfall/IP-bann)
+if (recentFailureExists($failFlagFile)) {
+    serveSnapshotOrError($snapshotFile, $format, [
+        'status' => 'error',
+        'message' => 'Koha tillfälligt onåbar (throttlad efter tidigare fel)'
+    ]);
+}
+
+// Hämta RSS-feed — enda anropet mot Koha i hela requesten
 $feedResult = fetchRssFeed($rssUrl);
 
 // Kontrollera om hämtningen lyckades
 if ($feedResult['data'] === false || $feedResult['http_code'] !== 200) {
-    http_response_code(500);
-    echo json_encode([
+    markFailure($failFlagFile);
+    serveSnapshotOrError($snapshotFile, $format, [
         'status' => 'error',
         'message' => 'Kunde inte hämta RSS-feed',
         'error' => $feedResult['error'],
         'http_code' => $feedResult['http_code']
     ]);
-    exit;
 }
 
 // Parsa XML
 $xml = simplexml_load_string($feedResult['data']);
 if ($xml === false) {
-    http_response_code(500);
-    echo json_encode([
+    markFailure($failFlagFile);
+    serveSnapshotOrError($snapshotFile, $format, [
         'status' => 'error',
         'message' => 'Kunde inte parsa XML-data'
     ]);
+}
+
+// Processa RSS-feed med metadata från Directus
+$processed = processRssFeedFromDirectus($xml, $baseUrl);
+$result = $processed['result'];
+$itemCount = count($result['items']);
+
+// Tom feed: skriv ingenting (Kohas bann kan ge tomma 200-svar som annars
+// förgiftar cachen). Snapshot serveras om den finns; äkta tom hylla är legalt.
+if ($itemCount === 0) {
+    $stale = loadStaleSnapshot($snapshotFile, $format);
+    if ($stale !== null) {
+        echo $stale;
+        exit;
+    }
+    echo $format === 'xml'
+        ? generateXmlOutput($result)
+        : json_encode($result, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
     exit;
 }
 
-// Hämta OAuth-token
-$apiToken = getOAuthToken($oauthUrl, $clientId, $clientSecret);
-if (!$apiToken) {
-    http_response_code(500);
-    echo json_encode([
-        'status' => 'error',
-        'message' => 'Kunde inte hämta OAuth-token'
-    ]);
+// Directus nere men RSS ok: föredra snapshot (har metadata + omslag) framför
+// degraderat RSS-only-svar. Utan snapshot serveras det degraderade svaret och
+// TTL-cachas (men snapshottas inte).
+if (!$processed['directus_ok']) {
+    $stale = loadStaleSnapshot($snapshotFile, $format);
+    if ($stale !== null) {
+        echo $stale;
+        exit;
+    }
+    $output = $format === 'xml'
+        ? generateXmlOutput($result)
+        : json_encode($result, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
+    file_put_contents($cacheFile, $output);
+    echo $output;
     exit;
 }
 
-// Processa RSS-feed med base URL för bilder
-$result = processRssFeed($xml, $apiBaseUrl, $apiToken, $baseUrl);
+// Lyckad hämtning: nollställ fail-flagga, skriv TTL-cache + snapshot
+@unlink($failFlagFile);
 
-// Generera output baserat på format
-if ($format === 'xml') {
-    $xmlOutput = generateXmlOutput($result);
-    file_put_contents($cacheFile, $xmlOutput);
-    echo $xmlOutput;
-} else {
-    $jsonOutput = json_encode($result, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
-    file_put_contents($cacheFile, $jsonOutput);
-    echo $jsonOutput;
-}
-?>
+$output = $format === 'xml'
+    ? generateXmlOutput($result)
+    : json_encode($result, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
+
+file_put_contents($cacheFile, $output);
+saveSnapshot($snapshotFile, $output, $itemCount);
+echo $output;

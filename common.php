@@ -47,6 +47,8 @@ function getOAuthToken($oauthUrl, $clientId, $clientSecret) {
         'Content-Type: application/x-www-form-urlencoded'
     ]);
     curl_setopt($ch, CURLOPT_TIMEOUT, 10);
+    // Snabb fail vid nätverksblockering (droppade paket) — påverkar bara connect-fasen
+    curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 5);
 
     $response = curl_exec($ch);
     $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
@@ -480,6 +482,8 @@ function fetchKohaLocalCover($biblioId, $kohaHost) {
     curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
     curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
     curl_setopt($ch, CURLOPT_TIMEOUT, 15);
+    // Snabb fail vid nätverksblockering (droppade paket) — påverkar bara connect-fasen
+    curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 5);
     curl_setopt($ch, CURLOPT_USERAGENT, 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36');
 
     $imageData = curl_exec($ch);
@@ -539,6 +543,8 @@ function fetchRssFeed($rssUrl) {
     curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
     curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
     curl_setopt($ch, CURLOPT_TIMEOUT, 30);
+    // Snabb fail vid nätverksblockering (droppade paket) — påverkar bara connect-fasen
+    curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 5);
     curl_setopt($ch, CURLOPT_COOKIE, 'KOHA_INIT=1');
     curl_setopt($ch, CURLOPT_USERAGENT, 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36');
 
@@ -642,6 +648,11 @@ function generateXmlOutput($result) {
         $item = $items->addChild('item');
 
         foreach ($itemData as $key => $value) {
+            // Array-fält (t.ex. series_title) serialiseras som JSON — htmlspecialchars
+            // på array är fatal TypeError i PHP 8
+            if (is_array($value)) {
+                $value = json_encode($value, JSON_UNESCAPED_UNICODE);
+            }
             if ($value !== null && $value !== '') {
                 // Hantera speciella tecken
                 $item->addChild($key, htmlspecialchars($value));
@@ -857,5 +868,302 @@ function getFilteredBibliosFromItems($apiBaseUrl, $apiToken, $itemTypes = [], $l
 
     // Begränsa till requested limit efter deduplikering
     return array_slice($biblios, 0, $limit);
+}
+
+// ============================================================
+// Directus-metadata och snapshot-fallback för webbendpoints
+// ============================================================
+
+// Hämta bokmetadata i bulk från Directus (kft_koha_biblios) för en lista biblio_ids.
+// Returnerar ['success' => bool, 'error' => string|null, 'books' => [biblio_id => bokdata]]
+// där bokdata har samma struktur som getBookDataFromApi().
+function getBiblioMetadataFromDirectus(array $biblioIds) {
+    $directusUrl = getenv('DIRECTUS_API_URL');
+    $token = getenv('DIRECTUS_API_TOKEN');
+
+    if (!$directusUrl || !$token) {
+        return ['success' => false, 'error' => 'Directus ej konfigurerat (DIRECTUS_API_URL/DIRECTUS_API_TOKEN saknas)', 'books' => []];
+    }
+
+    $ids = array_values(array_unique(array_filter(array_map('intval', $biblioIds))));
+    if (empty($ids)) {
+        return ['success' => true, 'error' => null, 'books' => []];
+    }
+
+    $fields = 'biblio_id,isbn,isbn_clean,title,author,abstract,subtitle,publisher,'
+            . 'publication_year,publication_place,pages,material_size,edition_statement,'
+            . 'series_title,age_restriction,url,ean,issn,notes';
+
+    $books = [];
+    // Chunka för att undvika för långa URL:er vid stora hyllor
+    foreach (array_chunk($ids, 100) as $chunk) {
+        $filter = json_encode([
+            '_and' => [
+                ['biblio_id' => ['_in' => $chunk]],
+                ['status' => ['_eq' => 'active']]
+            ]
+        ]);
+        $url = rtrim($directusUrl, '/') . '/items/kft_koha_biblios?limit=-1'
+             . '&fields=' . $fields
+             . '&filter=' . urlencode($filter);
+
+        $ch = curl_init();
+        curl_setopt($ch, CURLOPT_URL, $url);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_HTTPHEADER, [
+            'Authorization: Bearer ' . $token,
+            'Accept: application/json'
+        ]);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 15);
+
+        $response = curl_exec($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $error = curl_error($ch);
+        curl_close($ch);
+
+        if ($httpCode !== 200 || !$response) {
+            return ['success' => false, 'error' => $error ?: ('HTTP ' . $httpCode), 'books' => []];
+        }
+
+        $data = json_decode($response, true);
+        if (!isset($data['data']) || !is_array($data['data'])) {
+            return ['success' => false, 'error' => 'Oväntat svar från Directus', 'books' => []];
+        }
+
+        foreach ($data['data'] as $row) {
+            // Strängnyckel för att matcha extractBiblioId() som returnerar strängar
+            $books[(string)$row['biblio_id']] = mapDirectusRowToBookData($row);
+        }
+    }
+
+    return ['success' => true, 'error' => null, 'books' => $books];
+}
+
+// Mappa en Directus-rad (kft_koha_biblios) till samma struktur som getBookDataFromApi()
+function mapDirectusRowToBookData(array $row) {
+    // series_title lagras som JSON-array i Directus men kan komma tillbaka
+    // som array eller JSON-sträng beroende på fältkonfiguration
+    $series = $row['series_title'] ?? null;
+    if (is_string($series)) {
+        $decoded = json_decode($series, true);
+        $series = is_array($decoded) ? $decoded : null;
+    }
+    if (is_array($series) && count($series) === 0) {
+        $series = null;
+    }
+
+    // Tomma strängar → null för paritet med Koha API
+    $val = function($key) use ($row) {
+        $v = $row[$key] ?? null;
+        return ($v === '') ? null : $v;
+    };
+
+    return [
+        'isbn' => $val('isbn'),
+        'title' => $val('title'),
+        'author' => $val('author'),
+        'abstract' => $val('abstract'),
+        'subtitle' => $val('subtitle'),
+        'publisher' => $val('publisher'),
+        'publication_year' => $val('publication_year'),
+        'publication_place' => $val('publication_place'),
+        'pages' => $val('pages'),
+        'material_size' => $val('material_size'),
+        'edition_statement' => $val('edition_statement'),
+        'series_title' => $series,
+        'age_restriction' => $val('age_restriction'),
+        'url' => $val('url'),
+        'ean' => $val('ean'),
+        'issn' => $val('issn'),
+        'notes' => $val('notes')
+    ];
+}
+
+// Som resolveBookImage() men gör ALDRIG anrop mot Koha — endast lokal
+// bildcache och Syndetics. Kohas lokala omslag (bib-{id}.jpg) används
+// bara om filen redan finns på disk.
+function resolveBookImageLocal($firstIsbn, $biblioId, $publicBaseUrl = '', $allowSyndetics = true) {
+    $imageUrl = null;
+    $cachedImagePath = null;
+
+    if ($firstIsbn) {
+        $imageUrl = getImageUrl($firstIsbn);
+        if (file_exists(__DIR__ . '/public/images/' . $firstIsbn . '.jpg')) {
+            $cachedImagePath = 'images/' . $firstIsbn . '.jpg';
+        } elseif ($allowSyndetics && $imageUrl) {
+            $cachedImagePath = cacheImage($firstIsbn, $imageUrl);
+        }
+    } elseif ($biblioId) {
+        if (file_exists(__DIR__ . '/public/images/bib-' . $biblioId . '.jpg')) {
+            $cachedImagePath = 'images/bib-' . $biblioId . '.jpg';
+        }
+    }
+
+    $cachedImageFullUrl = ($cachedImagePath && $publicBaseUrl) ? $publicBaseUrl . $cachedImagePath : null;
+
+    return [
+        'image_url' => $imageUrl,
+        'image_cached' => $cachedImagePath,
+        'image_cached_url' => $cachedImageFullUrl,
+    ];
+}
+
+// Som processRssFeed() men hämtar metadata i bulk från Directus i stället för
+// Koha-API — 1 Koha-request (RSS:en) i stället för 2+ per bok.
+// Returnerar ['result' => resultatarray, 'directus_ok' => bool]
+function processRssFeedFromDirectus($xml, $baseUrl = '') {
+    $result = [
+        'status' => 'ok',
+        'cached_at' => date('Y-m-d H:i:s'),
+        'channel' => [
+            'title' => (string)$xml->channel->title,
+            'link' => (string)$xml->channel->link,
+            'description' => (string)$xml->channel->description,
+            'language' => (string)$xml->channel->language,
+            'lastBuildDate' => (string)$xml->channel->lastBuildDate
+        ],
+        'items' => []
+    ];
+
+    // Pass 1: samla RSS-fält och biblio_ids
+    $rssItems = [];
+    foreach ($xml->channel->item as $item) {
+        $link = (string)$item->link;
+        $rssItems[] = [
+            'title' => (string)$item->title,
+            'link' => $link,
+            'description' => (string)$item->description,
+            'pubDate' => (string)$item->pubDate,
+            'guid' => (string)$item->guid,
+            'biblio_id' => extractBiblioId($link)
+        ];
+    }
+
+    // Ett bulk-anrop för alla böcker i hyllan
+    $directus = getBiblioMetadataFromDirectus(array_filter(array_column($rssItems, 'biblio_id')));
+
+    $emptyBookData = [
+        'isbn' => null, 'title' => null, 'author' => null, 'abstract' => null,
+        'subtitle' => null, 'publisher' => null, 'publication_year' => null,
+        'publication_place' => null, 'pages' => null, 'material_size' => null,
+        'edition_statement' => null, 'series_title' => null, 'age_restriction' => null,
+        'url' => null, 'ean' => null, 'issn' => null, 'notes' => null
+    ];
+
+    // Pass 2: bygg items med exakt samma struktur som processRssFeed()
+    foreach ($rssItems as $rssItem) {
+        $biblioId = $rssItem['biblio_id'];
+        $bookData = ($biblioId !== null && isset($directus['books'][$biblioId]))
+            ? $directus['books'][$biblioId]
+            : $emptyBookData;
+
+        $firstIsbn = getFirstIsbn($bookData['isbn']);
+        $image = resolveBookImageLocal($firstIsbn, $biblioId, $baseUrl);
+
+        $result['items'][] = [
+            'title' => $rssItem['title'],
+            'link' => $rssItem['link'],
+            'description' => $rssItem['description'],
+            'pubDate' => $rssItem['pubDate'],
+            'guid' => $rssItem['guid'],
+            'biblio_id' => $biblioId,
+            'isbn' => $bookData['isbn'],
+            'isbn_clean' => $firstIsbn,
+            'api_title' => cleanTitle($bookData['title']),
+            'api_author' => $bookData['author'],
+            'abstract' => $bookData['abstract'],
+            'subtitle' => $bookData['subtitle'],
+            'publisher' => $bookData['publisher'],
+            'publication_year' => $bookData['publication_year'],
+            'publication_place' => $bookData['publication_place'],
+            'pages' => $bookData['pages'],
+            'material_size' => $bookData['material_size'],
+            'edition_statement' => $bookData['edition_statement'],
+            'series_title' => $bookData['series_title'],
+            'age_restriction' => $bookData['age_restriction'],
+            'url' => $bookData['url'],
+            'ean' => $bookData['ean'],
+            'notes' => $bookData['notes'],
+            'image_url' => $image['image_url'],
+            'image_cached' => $image['image_cached'],
+            'image_cached_url' => $image['image_cached_url']
+        ];
+    }
+
+    return ['result' => $result, 'directus_ok' => $directus['success']];
+}
+
+// Skriv last-known-good-snapshot — endast vid lyckad hämtning med minst 1 item.
+// Skyddar mot att tomma 200-svar från Koha skriver över en bra snapshot.
+function saveSnapshot($snapshotFile, $content, $itemCount) {
+    if ($itemCount < 1) {
+        return false;
+    }
+    return file_put_contents($snapshotFile, $content) !== false;
+}
+
+// Läs snapshot och markera som stale. Returnerar innehåll som sträng, eller null
+// om snapshot saknas, är korrupt eller saknar items. Original cached_at behålls
+// så att konsumenter ser datans verkliga ålder.
+function loadStaleSnapshot($snapshotFile, $format) {
+    if (!file_exists($snapshotFile)) {
+        return null;
+    }
+    $content = file_get_contents($snapshotFile);
+    if (!$content) {
+        return null;
+    }
+
+    if ($format === 'xml') {
+        if (strpos($content, '<items/>') !== false || strpos($content, '</cached_at>') === false) {
+            return null;
+        }
+        return str_replace('</cached_at>', "</cached_at>\n  <stale>true</stale>", $content);
+    }
+
+    $data = json_decode($content, true);
+    if (!is_array($data) || empty($data['items'])) {
+        return null;
+    }
+    $data['stale'] = true;
+    return json_encode($data, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
+}
+
+// Servera snapshot vid uppströmsfel (HTTP 200 + stale-markering); finns ingen
+// användbar snapshot skickas ordinarie felrespons. Avslutar alltid requesten.
+function serveSnapshotOrError($snapshotFile, $format, array $errorPayload) {
+    $stale = loadStaleSnapshot($snapshotFile, $format);
+    if ($stale !== null) {
+        http_response_code(200);
+        echo $stale;
+        exit;
+    }
+    http_response_code(500);
+    echo $format === 'xml' ? generateErrorXml($errorPayload) : json_encode($errorPayload, JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
+// Generera enkel fel-XML (delas av shelf.php och latest.php)
+function generateErrorXml($error) {
+    $xml = new SimpleXMLElement('<?xml version="1.0" encoding="UTF-8"?><response></response>');
+    $xml->addChild('status', htmlspecialchars($error['status']));
+    $xml->addChild('message', htmlspecialchars($error['message']));
+
+    $dom = new DOMDocument('1.0', 'UTF-8');
+    $dom->preserveWhiteSpace = false;
+    $dom->formatOutput = true;
+    $dom->loadXML($xml->asXML());
+
+    return $dom->saveXML();
+}
+
+// Fail-throttle: begränsa Koha-försök under pågående utfall/IP-bann.
+// En flaggfil per resurs; färsk flagga = hoppa över Koha och gå direkt på snapshot.
+function recentFailureExists($flagFile, $seconds = 300) {
+    return file_exists($flagFile) && (time() - filemtime($flagFile)) < $seconds;
+}
+
+function markFailure($flagFile) {
+    @touch($flagFile);
 }
 ?>

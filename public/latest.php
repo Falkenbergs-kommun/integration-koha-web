@@ -60,6 +60,8 @@ $itemTypeSuffix = empty($itemTypeIds) ? '' : '_' . implode('_', $itemTypeIds);
 $locationSuffix = empty($locations)   ? '' : '_loc_' . implode('_', $locations);
 $ccodeSuffix    = empty($ccodes)      ? '' : '_cc_'  . implode('_', $ccodes);
 $cacheFile = __DIR__ . "/../cache/cache_latest_{$limit}_{$format}{$itemTypeSuffix}{$locationSuffix}{$ccodeSuffix}.cache";
+// Last-known-good-snapshot: serveras med stale-markering vid Koha-fel
+$snapshotFile = __DIR__ . "/../cache/snapshot_latest_{$limit}_{$format}{$itemTypeSuffix}{$locationSuffix}{$ccodeSuffix}.cache";
 $cacheMaxAge = intval(getenv('CACHE_TTL_LATEST') ?: 3600); // Standard 1 timme
 
 // Säkerställ att cache-katalogen finns
@@ -84,10 +86,7 @@ $clientSecret = getenv('CLIENT_SECRET');
 // Hämta OAuth-token
 $apiToken = getOAuthToken($oauthUrl, $clientId, $clientSecret);
 if (!$apiToken) {
-    http_response_code(500);
-    $error = ['status' => 'error', 'message' => 'Kunde inte hämta OAuth-token'];
-    echo $format === 'xml' ? generateErrorXml($error) : json_encode($error);
-    exit;
+    serveSnapshotOrError($snapshotFile, $format, ['status' => 'error', 'message' => 'Kunde inte hämta OAuth-token']);
 }
 
 // Hämta biblios - olika strategi beroende på om någon filtrering används
@@ -112,15 +111,12 @@ if (!$hasFilters) {
     curl_close($ch);
 
     if ($httpCode !== 200 || !$response) {
-        http_response_code(500);
-        $errorMsg = [
+        serveSnapshotOrError($snapshotFile, $format, [
             'status' => 'error',
             'message' => 'Kunde inte hämta senaste böckerna från API',
             'http_code' => $httpCode,
             'error' => $error
-        ];
-        echo $format === 'xml' ? generateErrorXml($errorMsg) : json_encode($errorMsg);
-        exit;
+        ]);
     }
 
     $biblios = json_decode($response, true);
@@ -131,25 +127,30 @@ if (!$hasFilters) {
 
 // Validera resultat
 if (!is_array($biblios)) {
-    http_response_code(500);
-    $errorMsg = ['status' => 'error', 'message' => 'Ogiltigt svar från API'];
-    echo $format === 'xml' ? generateErrorXml($errorMsg) : json_encode($errorMsg);
-    exit;
+    serveSnapshotOrError($snapshotFile, $format, ['status' => 'error', 'message' => 'Ogiltigt svar från API']);
+}
+
+// getFilteredBibliosFromItems() returnerar [] vid API-fel — tomt filtrerat
+// resultat får inte förgifta cachen, servera snapshot om möjligt
+if ($hasFilters && empty($biblios)) {
+    serveSnapshotOrError($snapshotFile, $format, ['status' => 'error', 'message' => 'Inga träffar eller API-fel vid filtrering']);
 }
 
 // Processa böckerna och hämta fullständig metadata
 $result = processLatestBooks($biblios, $apiBaseUrl, $apiToken, $baseUrl);
 
-// Generera output baserat på format
-if ($format === 'xml') {
-    $xmlOutput = generateLatestXmlOutput($result);
-    file_put_contents($cacheFile, $xmlOutput);
-    echo $xmlOutput;
-} else {
-    $jsonOutput = json_encode($result, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
-    file_put_contents($cacheFile, $jsonOutput);
-    echo $jsonOutput;
+// Generera output baserat på format. TTL-cache och snapshot skrivs bara vid
+// minst 1 item (tomma svar får inte förgifta cache eller snapshot).
+$itemCount = count($result['items']);
+$output = $format === 'xml'
+    ? generateLatestXmlOutput($result)
+    : json_encode($result, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
+
+if ($itemCount > 0) {
+    file_put_contents($cacheFile, $output);
+    saveSnapshot($snapshotFile, $output, $itemCount);
 }
+echo $output;
 
 /**
  * Processa biblios från API och berika med metadata och bilder
@@ -225,19 +226,5 @@ function generateLatestXmlOutput($result) {
     return generateXmlOutput($result);
 }
 
-/**
- * Generera enkel fel-XML
- */
-function generateErrorXml($error) {
-    $xml = new SimpleXMLElement('<?xml version="1.0" encoding="UTF-8"?><response></response>');
-    $xml->addChild('status', htmlspecialchars($error['status']));
-    $xml->addChild('message', htmlspecialchars($error['message']));
-
-    $dom = new DOMDocument('1.0', 'UTF-8');
-    $dom->preserveWhiteSpace = false;
-    $dom->formatOutput = true;
-    $dom->loadXML($xml->asXML());
-
-    return $dom->saveXML();
-}
+// generateErrorXml() delas numera från common.php
 ?>

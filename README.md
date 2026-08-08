@@ -408,17 +408,22 @@ Se [js/README.md](js/README.md) för fullständig dokumentation och [js/example.
 
 ## Dataflöde
 
-### RSS-baserade endpoints (shelf.php, list.php, index.php)
+### shelf.php (Directus-first, sedan aug 2026)
 
 1. Klient gör förfrågan till endpoint (t.ex. `shelf.php?shelfnumber=247&format=json`)
 2. Kontrollera filbaserad cache (1 timmes TTL) - returnera omedelbart om giltig
-3. Hämta RSS-feed från bibliotekskatalog.falkenberg.se
-4. Parsa XML och extrahera biblionumber från varje post
-5. Autentisera mot externt API via OAuth 2.0 client credentials
-6. Hämta detaljerad bokmetadata för varje biblionumber från API
-7. Extrahera ISBN, generera Syndetics bild-URL, ladda ner och cacha bokomslag lokalt
-8. Bygg komplett JSON/XML-svar med RSS + API + bilddata
-9. Skriv till cache-fil och returnera till klient
+3. Kontrollera fail-flagga - vid nyligt Koha-fel (< 5 min) serveras snapshot direkt utan nytt Koha-försök
+4. Hämta RSS-feed från bibliotekskatalog.falkenberg.se (**enda Koha-anropet i hela requesten** - ger hyllmedlemskap + kanalinfo)
+5. Hämta all bokmetadata i **ett bulk-anrop** från Directus (`kft_koha_biblios`, filter på biblio_id + status=active)
+6. Lös bokomslag från lokal bildcache (`public/images/`), med Syndetics-nedladdning för saknade ISBN-omslag - aldrig Koha
+7. Bygg komplett JSON/XML-svar med RSS + Directus + bilddata
+8. Vid lyckat svar med ≥1 bok: skriv TTL-cache + last-known-good-snapshot, returnera till klient
+
+**Vid Koha-fel** (RSS onåbar, HTTP-fel, tomt svar): servera senaste snapshot med HTTP 200 och `"stale": true` i svaret (original `cached_at` behålls så konsumenter ser datans ålder). Endast om ingen snapshot finns returneras HTTP 500. Tomma 200-svar från Koha skriver aldrig över cache eller snapshot (förgiftningsskydd).
+
+### Övriga RSS-baserade endpoints (list.php, index.php)
+
+Som ovan men med metadata per bok från Koha REST API (2+ anrop per bok) och utan snapshot-fallback - äldre flöde, används av äldre integrationer.
 
 ### API-baserad endpoint (latest.php)
 
@@ -429,7 +434,20 @@ Se [js/README.md](js/README.md) för fullständig dokumentation och [js/example.
 5. Extrahera ISBN från varje bok, generera Syndetics bild-URL
 6. Ladda ner och cacha bokomslag lokalt
 7. Bygg komplett JSON/XML-svar med API-data + bilddata
-8. Skriv till cache-fil och returnera till klient
+8. Vid lyckat svar med ≥1 bok: skriv TTL-cache + snapshot, returnera till klient
+
+**Vid Koha-fel** (OAuth/API-fel eller tomt filtrerat resultat): servera senaste snapshot med HTTP 200 + `"stale": true`, annars HTTP 500.
+
+### Snapshot-återställning vid längre Koha-avbrott
+
+Om snapshots saknas eller behöver återskapas (t.ex. efter IP-block hos driftleverantören) kan de byggas från gamla cachefiler + Directus:
+
+```bash
+php directus/rebuild_shelf_snapshots.php --dry-run -v   # förhandsgranska
+php directus/rebuild_shelf_snapshots.php -v             # skriv snapshots
+```
+
+Scriptet tar hyllmedlemskap från senast kända friska cachefil (`cache_shelf*_json.cache`, `cache_list_*.json`, `cache.json`), hämtar färsk metadata från Directus och löser omslag från lokal bildcache. Förgiftade/tomma cachefiler skippas automatiskt.
 
 ## Projektstruktur
 
@@ -474,6 +492,15 @@ Se [js/README.md](js/README.md) för fullständig dokumentation och [js/example.
 - **Invalidering**: Automatisk via filemtime-kontroll
 - **Läge**: Läs/skriv för webbserver
 - **Automatisk skapning**: Katalogen skapas automatiskt om den inte finns
+
+### Last-known-good-snapshots (shelf.php, latest.php)
+
+- **Filnamn**: `cache/snapshot_shelf{nummer}_{format}.cache`, `cache/snapshot_latest_{...}.cache`
+- **TTL**: Ingen - persistenta, skrivs bara över vid lyckad hämtning med minst 1 bok
+- **Syfte**: Serveras med HTTP 200 + `"stale": true` när Koha är onåbar (i XML: `<stale>true</stale>`)
+- **Skydd**: Tomma svar från Koha kan aldrig skriva över en bra snapshot
+- **Fail-throttle**: `cache/fail_shelf{nummer}.flag` begränsar Koha-försök till 1 per 5 min per hylla under utfall
+- **Återskapning**: `php directus/rebuild_shelf_snapshots.php` (se Dataflöde ovan)
 
 ### Bildcache
 

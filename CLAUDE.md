@@ -19,7 +19,7 @@ Lägg ALLA nya webb-endpoints och statiska resurser i `public/`. Endpoints i `pu
 - **public/index.php**: Single-list endpoint (hardcoded to list 247) - fetches RSS, enriches with API data, caches result
 - **public/list.php**: Dynamic multi-list endpoint - accepts `?id=XXX` parameter to fetch any library list
 - **public/latest.php**: Latest books endpoint - fetches newest biblios, supports optional filtering on `?item_type_id=TYPE1,TYPE2`, `?location=MAG,SVSPRAK` (Kohas placering), and `?ccode=GYMN,VUX` (Kohas collection_code/avdelning). Filter kombineras: OR inom fält, AND mellan fält. Värden är skiftlägesokänsliga (normaliseras till uppercase).
-- **public/shelf.php**: Shelf-list endpoint - fetches a Koha shelf via RSS (`?shelfnumber=XXX&format=json|xml`), används av JS-widgeten `koha-shelf.js`
+- **public/shelf.php**: Shelf-list endpoint (`?shelfnumber=XXX&format=json|xml`), används av JS-widgeten `koha-shelf.js`. **Directus-first**: Koha-RSS:en ger bara hyllmedlemskap (1 request), bokmetadata hämtas i bulk från Directus (`getBiblioMetadataFromDirectus()`) och omslag från lokal bildcache — inga per-bok-anrop mot Koha (det var vad som triggade ImCodes fail2ban aug 2026). Vid Koha-fel serveras last-known-good-snapshot med HTTP 200 + `stale: true`; en fail-flagga throttlar Koha-försök till 1 per 5 min per hylla.
 - **public/book.php**: Single-book endpoint - fetches metadata for one biblio (`?biblionumber=XXX&format=json|xml`)
 - **public/item-types.php**: Item types listing endpoint - fetches all available item types from Koha API with no caching
 - **public/js/**: JS-widget-distribution (`koha-shelf.js` + demo)
@@ -88,6 +88,7 @@ See `.env.example` for template and `docs/GEMINI_ENRICHMENT.md` for detailed set
 
 - **JSON response cache**: `cache.json` (index.php), `cache_list_{id}.json` (list.php), or `cache_latest_{limit}_{format}{_itemtypes}{_loc_locations}{_cc_ccodes}.cache` (latest.php) - 1 hour TTL
 - **Image cache**: `public/images/{isbn}.jpg` - persistent, never expires
+- **Last-known-good snapshots**: `cache/snapshot_shelf{N}_{format}.cache` och `cache/snapshot_latest_*.cache` - persistenta, skrivs bara vid lyckad hämtning med ≥1 item (`saveSnapshot()`), serveras med `stale: true` vid Koha-fel (`serveSnapshotOrError()` i common.php). Tomma 200-svar från Koha får ALDRIG skriva över cache eller snapshot (förgiftningsskydd). Snapshots kan återskapas från gamla cachefiler + Directus med `php directus/rebuild_shelf_snapshots.php`.
 - **Cache invalidation**: Automatic after 1 hour via filemtime check
 - **Filter-based caching**: Varje unik filter-kombination får separat cache-fil. Exempel: `cache_latest_10_json_BARNBOK_BARNDVD.cache`, `cache_latest_10_json_loc_MAG.cache`, `cache_latest_10_json_BARNBOK_loc_MAG_cc_BARN.cache`. Tomma filter ger tom suffix-sträng – cache-nycklar utan location/ccode förblir bakåtkompatibla med pre-2026-04 versioner.
 
@@ -142,6 +143,7 @@ The final JSON includes 20+ metadata fields per book including ISBN, title, auth
 - **`backfill_marc_fields.php`** – Engångsscript som hämtar publication_year, language_code, subjects_marc, genre_form, sab_classification och contributors från MARC-poster. Default: bara poster utan publication_year; `--force` för alla. Stöder `--dry-run`, `--limit=N`, `-v`.
 - **`add_marc_fields.php`** – Migrationsscript som lägger till nya MARC-fält (language_code, subjects_marc, genre_form, sab_classification, contributors) i befintlig Directus-kollektion.
 - **`cleanup_duplicates.php`** – Rensar dubbletter i `kft_koha_biblios`. Kör med `--dry-run` för förhandsvisning.
+- **`rebuild_shelf_snapshots.php`** – Återskapar last-known-good-snapshots för shelf.php från gamla friska cachefiler (hyllmedlemskap) + Directus (färsk metadata) + lokal bildcache. Används när Koha är onåbar. Stöder `--dry-run`, `--shelf=N`, `-v`.
 - **`sync_cron.sh`** – Kör alla syncar i sekvens: Branches → Biblios → Items → Holds → Enrich (1000 böcker) → Qdrant vectors (dagligen kl 03:00). Skickar start/success/fail-ping till healthchecks.io med per-steg-payload (nyckeltal som created/updated/errors). Konfigureras via `HEALTHCHECK_SYNC_ID` i `.env`. Exporterar `~/.local/bin` i PATH för att `uv` ska hittas i cron-miljön.
 - **`prepare_embedding_text.php`** – Aggregerar data från alla 4 Directus-kollektioner och bygger strukturerad embedding-text + metadata per biblio. Stöder `--output=json|jsonl|csv`, `--limit=N`, `--biblio-id=N`.
 
