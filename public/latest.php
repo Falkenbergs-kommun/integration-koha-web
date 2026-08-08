@@ -62,6 +62,8 @@ $ccodeSuffix    = empty($ccodes)      ? '' : '_cc_'  . implode('_', $ccodes);
 $cacheFile = __DIR__ . "/../cache/cache_latest_{$limit}_{$format}{$itemTypeSuffix}{$locationSuffix}{$ccodeSuffix}.cache";
 // Last-known-good-snapshot: serveras med stale-markering vid Koha-fel
 $snapshotFile = __DIR__ . "/../cache/snapshot_latest_{$limit}_{$format}{$itemTypeSuffix}{$locationSuffix}{$ccodeSuffix}.cache";
+// Fail-throttle-flagga: delas mellan json/xml (samma Koha-anrop oavsett format)
+$failFlagFile = __DIR__ . "/../cache/fail_latest_{$limit}{$itemTypeSuffix}{$locationSuffix}{$ccodeSuffix}.flag";
 $cacheMaxAge = intval(getenv('CACHE_TTL_LATEST') ?: 3600); // Standard 1 timme
 
 // Säkerställ att cache-katalogen finns
@@ -76,6 +78,15 @@ if (file_exists($cacheFile) && (time() - filemtime($cacheFile)) < $cacheMaxAge) 
     exit;
 }
 
+// Fail-throttle: vid nyligt Koha-fel, gå direkt på snapshot utan nytt försök
+// (undviker att hamra ImCodes server under utfall/IP-bann)
+if (recentFailureExists($failFlagFile)) {
+    serveSnapshotOrError($snapshotFile, $format, [
+        'status' => 'error',
+        'message' => 'Koha tillfälligt onåbar (throttlad efter tidigare fel)'
+    ]);
+}
+
 // Hämta konfiguration från .env
 $baseUrl = getenv('BASE_URL') ?: 'https://bibliotek.falkenberg.se/fbg_apps/services/koha/';
 $apiBaseUrl = getenv('API_BASE_URL');
@@ -86,6 +97,7 @@ $clientSecret = getenv('CLIENT_SECRET');
 // Hämta OAuth-token
 $apiToken = getOAuthToken($oauthUrl, $clientId, $clientSecret);
 if (!$apiToken) {
+    markFailure($failFlagFile);
     serveSnapshotOrError($snapshotFile, $format, ['status' => 'error', 'message' => 'Kunde inte hämta OAuth-token']);
 }
 
@@ -111,6 +123,7 @@ if (!$hasFilters) {
     curl_close($ch);
 
     if ($httpCode !== 200 || !$response) {
+        markFailure($failFlagFile);
         serveSnapshotOrError($snapshotFile, $format, [
             'status' => 'error',
             'message' => 'Kunde inte hämta senaste böckerna från API',
@@ -127,12 +140,15 @@ if (!$hasFilters) {
 
 // Validera resultat
 if (!is_array($biblios)) {
+    markFailure($failFlagFile);
     serveSnapshotOrError($snapshotFile, $format, ['status' => 'error', 'message' => 'Ogiltigt svar från API']);
 }
 
 // getFilteredBibliosFromItems() returnerar [] vid API-fel — tomt filtrerat
-// resultat får inte förgifta cachen, servera snapshot om möjligt
+// resultat får inte förgifta cachen, servera snapshot om möjligt. Throttlas
+// också: under IP-bann är detta den väg varje request annars betalar fullt pris för.
 if ($hasFilters && empty($biblios)) {
+    markFailure($failFlagFile);
     serveSnapshotOrError($snapshotFile, $format, ['status' => 'error', 'message' => 'Inga träffar eller API-fel vid filtrering']);
 }
 
