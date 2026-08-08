@@ -1159,7 +1159,11 @@ function generateErrorXml($error) {
 
 // Fail-throttle: begränsa Koha-försök under pågående utfall/IP-bann.
 // En flaggfil per resurs; färsk flagga = hoppa över Koha och gå direkt på snapshot.
-function recentFailureExists($flagFile, $seconds = 300) {
+// Default 30 min — konfigurerbar via KOHA_FAIL_THROTTLE i .env (sekunder).
+function recentFailureExists($flagFile, $seconds = null) {
+    if ($seconds === null) {
+        $seconds = intval(getenv('KOHA_FAIL_THROTTLE') ?: 1800);
+    }
     return file_exists($flagFile) && (time() - filemtime($flagFile)) < $seconds;
 }
 

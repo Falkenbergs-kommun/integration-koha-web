@@ -412,7 +412,7 @@ Se [js/README.md](js/README.md) för fullständig dokumentation och [js/example.
 
 1. Klient gör förfrågan till endpoint (t.ex. `shelf.php?shelfnumber=247&format=json`)
 2. Kontrollera filbaserad cache (1 timmes TTL) - returnera omedelbart om giltig
-3. Kontrollera fail-flagga - vid nyligt Koha-fel (< 5 min) serveras snapshot direkt utan nytt Koha-försök
+3. Kontrollera fail-flagga - vid nyligt Koha-fel (< 30 min, konfigurerbart via `KOHA_FAIL_THROTTLE`) serveras snapshot direkt utan nytt Koha-försök
 4. Hämta RSS-feed från bibliotekskatalog.falkenberg.se (**enda Koha-anropet i hela requesten** - ger hyllmedlemskap + kanalinfo)
 5. Hämta all bokmetadata i **ett bulk-anrop** från Directus (`kft_koha_biblios`, filter på biblio_id + status=active)
 6. Lös bokomslag från lokal bildcache (`public/images/`), med Syndetics-nedladdning för saknade ISBN-omslag - aldrig Koha
@@ -499,7 +499,7 @@ Scriptet tar hyllmedlemskap från senast kända friska cachefil (`cache_shelf*_j
 - **TTL**: Ingen - persistenta, skrivs bara över vid lyckad hämtning med minst 1 bok
 - **Syfte**: Serveras med HTTP 200 + `"stale": true` när Koha är onåbar (i XML: `<stale>true</stale>`)
 - **Skydd**: Tomma svar från Koha kan aldrig skriva över en bra snapshot
-- **Fail-throttle**: `cache/fail_shelf{nummer}.flag` begränsar Koha-försök till 1 per 5 min per hylla under utfall
+- **Fail-throttle**: `cache/fail_shelf{nummer}.flag` begränsar Koha-försök till 1 per 30 min per hylla under utfall (konfigurerbart via `KOHA_FAIL_THROTTLE` i `.env`, sekunder)
 - **Återskapning**: `php directus/rebuild_shelf_snapshots.php` (se Dataflöde ovan)
 
 ### Bildcache
