@@ -767,109 +767,6 @@ function safeTruncate($value, $maxLength)
     return $value;
 }
 
-function getFilteredBibliosFromItems($apiBaseUrl, $apiToken, $itemTypes = [], $limit = 10, $locations = [], $ccodes = []) {
-    // Bygg URL - API-endpoint för items
-    // API_BASE_URL pekar till /biblios/, men items är på samma nivå
-    $baseApiUrl = preg_replace('#/biblios/?$#', '', $apiBaseUrl);
-    $itemsUrl = rtrim($baseApiUrl, '/') . '/items';
-
-    // Bygg query parameters
-    // Hämta fler items än limit för att kompensera för deduplikering
-    // (flera items kan tillhöra samma biblio)
-    $perPage = $limit * 5;  // Hämta 5x limit för att säkerställa tillräckligt med unika biblios
-    $orderBy = '-item_id';   // Senaste items först
-
-    // Bygg query string med Koha API q-parameter format
-    // Koha använder q-parameter för filtrering: ?q={"item_type_id":["BOK","DVD"]}
-    $queryParts = [];
-    $queryParts[] = '_per_page=' . urlencode($perPage);
-    $queryParts[] = '_order_by=' . urlencode($orderBy);
-
-    // Bygg JSON query med implicit AND mellan fält, OR inom varje array.
-    // ccode mappas till Kohas riktiga fältnamn collection_code här.
-    $qFilter = [];
-    if (!empty($itemTypes)) $qFilter['item_type_id']    = $itemTypes;
-    if (!empty($locations)) $qFilter['location']        = $locations;
-    if (!empty($ccodes))    $qFilter['collection_code'] = $ccodes;
-    if (!empty($qFilter)) {
-        $queryParts[] = 'q=' . urlencode(json_encode($qFilter));
-    }
-
-    // Bygg URL med query string
-    $url = $itemsUrl . '?' . implode('&', $queryParts);
-
-    // Gör API-anrop med x-koha-embed header för att inkludera biblio-data
-    $ch = curl_init();
-    curl_setopt($ch, CURLOPT_URL, $url);
-    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
-    curl_setopt($ch, CURLOPT_HTTPHEADER, [
-        'Accept: application/json',
-        'Authorization: Bearer ' . $apiToken,
-        'x-koha-embed: biblio'  // Kritisk: bädda in biblio-data i item-responsen
-    ]);
-    curl_setopt($ch, CURLOPT_TIMEOUT, 30);
-
-    $response = curl_exec($ch);
-    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    $error = curl_error($ch);
-    curl_close($ch);
-
-    // Felhantering - returnera tom array vid fel
-    if ($httpCode !== 200 || !$response) {
-        return [];
-    }
-
-    // Parsa JSON-respons
-    $items = json_decode($response, true);
-    if (!is_array($items)) {
-        return [];
-    }
-
-    // Extrahera och dedupliera biblios samt samla item_types
-    // Använd biblio_id som nyckel för att automatiskt dedupliera
-    $bibliosMap = [];
-    $itemTypesMap = []; // Samla alla item_type_id per biblio
-
-    foreach ($items as $item) {
-        // Extrahera inbäddad biblio-data
-        $biblio = $item['biblio'] ?? null;
-        if (!$biblio || !isset($biblio['biblio_id'])) {
-            continue;
-        }
-
-        $biblioId = $biblio['biblio_id'];
-
-        // Behåll bara första förekomsten av varje biblio (högsta item_id pga sortering)
-        if (!isset($bibliosMap[$biblioId])) {
-            $bibliosMap[$biblioId] = $biblio;
-            $itemTypesMap[$biblioId] = [];
-        }
-
-        // Samla item_type_id för denna biblio (dedupliera även item types)
-        $itemTypeId = $item['item_type_id'] ?? null;
-        if ($itemTypeId && !in_array($itemTypeId, $itemTypesMap[$biblioId])) {
-            $itemTypesMap[$biblioId][] = $itemTypeId;
-        }
-    }
-
-    // Konvertera till array, lägg till item_types, och sortera efter biblio_id fallande
-    $biblios = [];
-    foreach ($bibliosMap as $biblioId => $biblio) {
-        // Lägg till item_types array till varje biblio
-        $biblio['item_types'] = $itemTypesMap[$biblioId] ?? [];
-        $biblios[] = $biblio;
-    }
-
-    // Sortera efter biblio_id fallande (senaste först)
-    usort($biblios, function($a, $b) {
-        return $b['biblio_id'] - $a['biblio_id'];
-    });
-
-    // Begränsa till requested limit efter deduplikering
-    return array_slice($biblios, 0, $limit);
-}
-
 // ============================================================
 // Directus-metadata och snapshot-fallback för webbendpoints
 // ============================================================
@@ -977,6 +874,127 @@ function mapDirectusRowToBookData(array $row) {
         'issn' => $val('issn'),
         'notes' => $val('notes')
     ];
+}
+
+// Intern hjälpare: GET mot Directus items-API. Returnerar
+// ['success' => bool, 'error' => string|null, 'rows' => array]
+function directusItemsGet($collection, array $queryParams) {
+    $directusUrl = getenv('DIRECTUS_API_URL');
+    $token = getenv('DIRECTUS_API_TOKEN');
+
+    if (!$directusUrl || !$token) {
+        return ['success' => false, 'error' => 'Directus ej konfigurerat (DIRECTUS_API_URL/DIRECTUS_API_TOKEN saknas)', 'rows' => []];
+    }
+
+    $url = rtrim($directusUrl, '/') . '/items/' . $collection . '?' . http_build_query($queryParams);
+
+    $ch = curl_init();
+    curl_setopt($ch, CURLOPT_URL, $url);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_HTTPHEADER, [
+        'Authorization: Bearer ' . $token,
+        'Accept: application/json'
+    ]);
+    curl_setopt($ch, CURLOPT_TIMEOUT, 15);
+
+    $response = curl_exec($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $error = curl_error($ch);
+    curl_close($ch);
+
+    if ($httpCode !== 200 || !$response) {
+        return ['success' => false, 'error' => $error ?: ('HTTP ' . $httpCode), 'rows' => []];
+    }
+
+    $data = json_decode($response, true);
+    if (!isset($data['data']) || !is_array($data['data'])) {
+        return ['success' => false, 'error' => 'Oväntat svar från Directus', 'rows' => []];
+    }
+
+    return ['success' => true, 'error' => null, 'rows' => $data['data']];
+}
+
+// Hämta de senaste aktiva biblio_id:na från Directus (kft_koha_biblios),
+// sorterat på biblio_id fallande. Ersätter Kohas /biblios?_order_by=-biblio_id.
+// Returnerar ['success' => bool, 'error' => string|null, 'ids' => int[]]
+function getLatestBiblioIdsFromDirectus($limit) {
+    $res = directusItemsGet('kft_koha_biblios', [
+        'fields' => 'biblio_id',
+        'sort' => '-biblio_id',
+        'limit' => intval($limit),
+        'filter' => json_encode(['status' => ['_eq' => 'active']])
+    ]);
+    if (!$res['success']) {
+        return ['success' => false, 'error' => $res['error'], 'ids' => []];
+    }
+    $ids = array_values(array_filter(array_map(function($row) {
+        return intval($row['biblio_id'] ?? 0);
+    }, $res['rows'])));
+    return ['success' => true, 'error' => null, 'ids' => $ids];
+}
+
+// Hämta distinkta biblio_ids (senaste först) från kft_koha_items filtrerat på
+// item_type_id, location och/eller collection_code (OR inom fält, AND mellan).
+// Ersätter getFilteredBibliosFromItems() utan Koha-beroende. Sorteringen
+// -biblio_id lägger alla exemplar av samma biblio intill varandra, så
+// dedupliceringen kan avbryta så fort en ny biblio dyker upp efter limit —
+// hela träffmängden behöver aldrig hållas i minnet.
+// Returnerar ['success', 'error', 'ids' => int[], 'item_types_map' => [biblio_id => [typ, ...]]]
+function getFilteredBiblioIdsFromDirectus(array $itemTypes, array $locations, array $ccodes, $limit) {
+    $and = [['status' => ['_eq' => 'active']]];
+    if (!empty($itemTypes)) {
+        $and[] = ['item_type_id' => ['_in' => array_values($itemTypes)]];
+    }
+    if (!empty($locations)) {
+        $and[] = ['location' => ['_in' => array_values($locations)]];
+    }
+    if (!empty($ccodes)) {
+        $and[] = ['collection_code' => ['_in' => array_values($ccodes)]];
+    }
+    $filter = json_encode(['_and' => $and]);
+
+    $ids = [];
+    $itemTypesMap = [];
+    $pageSize = 500;
+    $maxPages = 20; // Skyddstak: 10k items räcker gott för limit ≤ 50
+
+    for ($page = 0; $page < $maxPages; $page++) {
+        $res = directusItemsGet('kft_koha_items', [
+            'fields' => 'biblio_id,item_type_id',
+            'sort' => '-biblio_id,item_id',
+            'limit' => $pageSize,
+            'offset' => $page * $pageSize,
+            'filter' => $filter
+        ]);
+        if (!$res['success']) {
+            return ['success' => false, 'error' => $res['error'], 'ids' => [], 'item_types_map' => []];
+        }
+
+        foreach ($res['rows'] as $row) {
+            $biblioId = intval($row['biblio_id'] ?? 0);
+            if (!$biblioId) {
+                continue;
+            }
+            if (!isset($itemTypesMap[$biblioId])) {
+                if (count($ids) >= $limit) {
+                    // Ny biblio efter nådd limit — klart (exemplar ligger adjacenta)
+                    return ['success' => true, 'error' => null, 'ids' => $ids, 'item_types_map' => $itemTypesMap];
+                }
+                $itemTypesMap[$biblioId] = [];
+                $ids[] = $biblioId;
+            }
+            $type = $row['item_type_id'] ?? null;
+            if ($type && !in_array($type, $itemTypesMap[$biblioId])) {
+                $itemTypesMap[$biblioId][] = $type;
+            }
+        }
+
+        if (count($res['rows']) < $pageSize) {
+            break; // Sista sidan
+        }
+    }
+
+    return ['success' => true, 'error' => null, 'ids' => $ids, 'item_types_map' => $itemTypesMap];
 }
 
 // Som resolveBookImage() men gör ALDRIG anrop mot Koha — endast lokal

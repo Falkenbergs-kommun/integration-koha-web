@@ -1,5 +1,9 @@
 <?php
-// Endpoint för att hämta de senaste böckerna i katalogen (nyinköp)
+// Endpoint för att hämta de senaste böckerna i katalogen (nyinköp).
+// Directus-first HELT utan Koha-beroende: biblio-upptäckt från kft_koha_biblios
+// (ofiltrerat) eller kft_koha_items (filtrerat), metadata i bulk från
+// kft_koha_biblios, omslag från lokal bildcache + Syndetics. Directus synkas
+// från Koha varje natt kl 03:00 — datat kan alltså släpa upp till ett dygn.
 require_once __DIR__ . '/../common.php';
 
 // Ladda .env-fil
@@ -29,7 +33,7 @@ if (isset($_GET['location']) && !empty(trim($_GET['location']))) {
     sort($locations);
 }
 
-// Hämta och validera ccode filter (kommaseparerad lista, mappas till collection_code i common.php)
+// Hämta och validera ccode filter (kommaseparerad lista, mappas till collection_code)
 $ccodes = [];
 if (isset($_GET['ccode']) && !empty(trim($_GET['ccode']))) {
     $ccodes = array_filter(
@@ -60,9 +64,9 @@ $itemTypeSuffix = empty($itemTypeIds) ? '' : '_' . implode('_', $itemTypeIds);
 $locationSuffix = empty($locations)   ? '' : '_loc_' . implode('_', $locations);
 $ccodeSuffix    = empty($ccodes)      ? '' : '_cc_'  . implode('_', $ccodes);
 $cacheFile = __DIR__ . "/../cache/cache_latest_{$limit}_{$format}{$itemTypeSuffix}{$locationSuffix}{$ccodeSuffix}.cache";
-// Last-known-good-snapshot: serveras med stale-markering vid Koha-fel
+// Last-known-good-snapshot: serveras med stale-markering vid uppströmsfel
 $snapshotFile = __DIR__ . "/../cache/snapshot_latest_{$limit}_{$format}{$itemTypeSuffix}{$locationSuffix}{$ccodeSuffix}.cache";
-// Fail-throttle-flagga: delas mellan json/xml (samma Koha-anrop oavsett format)
+// Fail-throttle-flagga: delas mellan json/xml (samma Directus-anrop oavsett format)
 $failFlagFile = __DIR__ . "/../cache/fail_latest_{$limit}{$itemTypeSuffix}{$locationSuffix}{$ccodeSuffix}.flag";
 $cacheMaxAge = intval(getenv('CACHE_TTL_LATEST') ?: 3600); // Standard 1 timme
 
@@ -78,101 +82,77 @@ if (file_exists($cacheFile) && (time() - filemtime($cacheFile)) < $cacheMaxAge) 
     exit;
 }
 
-// Fail-throttle: vid nyligt Koha-fel, gå direkt på snapshot utan nytt försök
-// (undviker att hamra ImCodes server under utfall/IP-bann)
+// Fail-throttle: vid nyligt Directus-fel, gå direkt på snapshot utan nytt försök
 if (recentFailureExists($failFlagFile)) {
     serveSnapshotOrError($snapshotFile, $format, [
         'status' => 'error',
-        'message' => 'Koha tillfälligt onåbar (throttlad efter tidigare fel)'
+        'message' => 'Uppströmskälla tillfälligt onåbar (throttlad efter tidigare fel)'
     ]);
 }
 
-// Hämta konfiguration från .env
 $baseUrl = getenv('BASE_URL') ?: 'https://bibliotek.falkenberg.se/fbg_apps/services/koha/';
-$apiBaseUrl = getenv('API_BASE_URL');
-$oauthUrl = getenv('OAUTH_URL');
-$clientId = getenv('CLIENT_ID');
-$clientSecret = getenv('CLIENT_SECRET');
 
-// Hämta OAuth-token
-$apiToken = getOAuthToken($oauthUrl, $clientId, $clientSecret);
-if (!$apiToken) {
-    markFailure($failFlagFile);
-    serveSnapshotOrError($snapshotFile, $format, ['status' => 'error', 'message' => 'Kunde inte hämta OAuth-token']);
-}
-
-// Hämta biblios - olika strategi beroende på om någon filtrering används
+// Upptäck biblio_ids via Directus — olika kollektion beroende på filtrering
 $hasFilters = !empty($itemTypeIds) || !empty($locations) || !empty($ccodes);
 if (!$hasFilters) {
-    // Ingen filtrering - använd direkt biblios endpoint (snabbast)
-    $bibliosUrl = rtrim($apiBaseUrl, '/') . '?_order_by=-biblio_id&_per_page=' . $limit;
-
-    $ch = curl_init();
-    curl_setopt($ch, CURLOPT_URL, $bibliosUrl);
-    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
-    curl_setopt($ch, CURLOPT_HTTPHEADER, [
-        'Accept: application/json',
-        'Authorization: Bearer ' . $apiToken
-    ]);
-    curl_setopt($ch, CURLOPT_TIMEOUT, 30);
-
-    $response = curl_exec($ch);
-    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    $error = curl_error($ch);
-    curl_close($ch);
-
-    if ($httpCode !== 200 || !$response) {
-        markFailure($failFlagFile);
-        serveSnapshotOrError($snapshotFile, $format, [
-            'status' => 'error',
-            'message' => 'Kunde inte hämta senaste böckerna från API',
-            'http_code' => $httpCode,
-            'error' => $error
-        ]);
-    }
-
-    $biblios = json_decode($response, true);
+    $discovery = getLatestBiblioIdsFromDirectus($limit);
+    $itemTypesMap = null; // Ofiltrerat svar har aldrig haft item_types (paritet med Koha-varianten)
 } else {
-    // Filtrering på item_type_id, location och/eller ccode - använd items endpoint med biblio embed
-    $biblios = getFilteredBibliosFromItems($apiBaseUrl, $apiToken, $itemTypeIds, $limit, $locations, $ccodes);
+    $discovery = getFilteredBiblioIdsFromDirectus($itemTypeIds, $locations, $ccodes, $limit);
+    $itemTypesMap = $discovery['item_types_map'];
 }
 
-// Validera resultat
-if (!is_array($biblios)) {
+if (!$discovery['success']) {
     markFailure($failFlagFile);
-    serveSnapshotOrError($snapshotFile, $format, ['status' => 'error', 'message' => 'Ogiltigt svar från API']);
+    serveSnapshotOrError($snapshotFile, $format, [
+        'status' => 'error',
+        'message' => 'Kunde inte hämta data från Directus',
+        'error' => $discovery['error']
+    ]);
 }
 
-// getFilteredBibliosFromItems() returnerar [] vid API-fel — tomt filtrerat
-// resultat får inte förgifta cachen, servera snapshot om möjligt. Throttlas
-// också: under IP-bann är detta den väg varje request annars betalar fullt pris för.
-if ($hasFilters && empty($biblios)) {
+// Bulk-metadata från Directus + lokala omslag
+$processed = processLatestBooksFromDirectus($discovery['ids'], $itemTypesMap, $baseUrl);
+if (!$processed['directus_ok']) {
     markFailure($failFlagFile);
-    serveSnapshotOrError($snapshotFile, $format, ['status' => 'error', 'message' => 'Inga träffar eller API-fel vid filtrering']);
+    serveSnapshotOrError($snapshotFile, $format, [
+        'status' => 'error',
+        'message' => 'Kunde inte hämta metadata från Directus'
+    ]);
 }
-
-// Processa böckerna och hämta fullständig metadata
-$result = processLatestBooks($biblios, $apiBaseUrl, $apiToken, $baseUrl);
-
-// Generera output baserat på format. TTL-cache och snapshot skrivs bara vid
-// minst 1 item (tomma svar får inte förgifta cache eller snapshot).
+$result = $processed['result'];
 $itemCount = count($result['items']);
+
+// Tomt resultat: Directus success + tomt är pålitligt (ingen tyst felmod som
+// Kohas utgångna token), men plötsligt tomt där data funnits är misstänkt —
+// föredra snapshot. Skriver aldrig cache/snapshot (förgiftningsskydd).
+if ($itemCount === 0) {
+    $stale = loadStaleSnapshot($snapshotFile, $format);
+    if ($stale !== null) {
+        echo $stale;
+        exit;
+    }
+    echo $format === 'xml'
+        ? generateLatestXmlOutput($result)
+        : json_encode($result, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
+    exit;
+}
+
 $output = $format === 'xml'
     ? generateLatestXmlOutput($result)
     : json_encode($result, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
 
-if ($itemCount > 0) {
-    file_put_contents($cacheFile, $output);
-    saveSnapshot($snapshotFile, $output, $itemCount);
-}
+file_put_contents($cacheFile, $output);
+saveSnapshot($snapshotFile, $output, $itemCount);
 echo $output;
 
 /**
- * Processa biblios från API och berika med metadata och bilder
- * Använder samma struktur som processRssFeed för konsistens
+ * Bygg resultat från Directus-metadata. Samma item-struktur som tidigare
+ * Koha-baserade processLatestBooks() — konsumenter ska inte märka skillnad.
+ * $itemTypesMap: null för ofiltrerat läge (item_types blir null per item),
+ * annars [biblio_id => [typ, ...]] från getFilteredBiblioIdsFromDirectus().
  */
-function processLatestBooks($biblios, $apiBaseUrl, $apiToken, $baseUrl) {
+function processLatestBooksFromDirectus($biblioIds, $itemTypesMap, $baseUrl) {
     $result = [
         'status' => 'ok',
         'cached_at' => date('Y-m-d H:i:s'),
@@ -186,53 +166,59 @@ function processLatestBooks($biblios, $apiBaseUrl, $apiToken, $baseUrl) {
         'items' => []
     ];
 
-    foreach ($biblios as $biblio) {
-        // Hämta biblio_id
-        $biblioId = $biblio['biblio_id'] ?? null;
+    if (empty($biblioIds)) {
+        return ['result' => $result, 'directus_ok' => true];
+    }
 
-        if (!$biblioId) {
+    $directus = getBiblioMetadataFromDirectus($biblioIds);
+    if (!$directus['success']) {
+        return ['result' => $result, 'directus_ok' => false];
+    }
+
+    foreach ($biblioIds as $biblioId) {
+        // Biblio kan saknas i metadata-svaret (hunnit bli inactive) — hoppa över
+        $bookData = $directus['books'][(string)$biblioId] ?? null;
+        if ($bookData === null) {
             continue;
         }
 
-        // Extrahera första ISBN och resolva bildtrippel (Syndetics eller Kohas lokala omslag)
-        $firstIsbn = getFirstIsbn($biblio['isbn'] ?? null);
-        $image = resolveBookImage($firstIsbn, $biblioId, $apiBaseUrl, $baseUrl);
+        $firstIsbn = getFirstIsbn($bookData['isbn']);
+        $image = resolveBookImageLocal($firstIsbn, $biblioId, $baseUrl);
 
-        // Bygg länk till katalogposten
         $catalogLink = 'https://bibliotekskatalog.falkenberg.se/cgi-bin/koha/opac-detail.pl?biblionumber=' . $biblioId;
 
         $result['items'][] = [
-            'title' => cleanTitle($biblio['title'] ?? null),
+            'title' => cleanTitle($bookData['title']),
             'link' => $catalogLink,
-            'description' => $biblio['abstract'] ?? '',
+            'description' => $bookData['abstract'] ?? '',
             'pubDate' => date('r'),
             'guid' => $catalogLink,
             'biblio_id' => $biblioId,
-            'isbn' => $biblio['isbn'] ?? null,
+            'isbn' => $bookData['isbn'],
             'isbn_clean' => $firstIsbn,
-            'api_title' => cleanTitle($biblio['title'] ?? null),
-            'api_author' => $biblio['author'] ?? null,
-            'abstract' => $biblio['abstract'] ?? null,
-            'subtitle' => $biblio['subtitle'] ?? null,
-            'publisher' => $biblio['publisher'] ?? null,
-            'publication_year' => $biblio['publication_year'] ?? null,
-            'publication_place' => $biblio['publication_place'] ?? null,
-            'pages' => $biblio['pages'] ?? null,
-            'material_size' => $biblio['material_size'] ?? null,
-            'edition_statement' => $biblio['edition_statement'] ?? null,
-            'series_title' => $biblio['series_title'] ?? null,
-            'age_restriction' => $biblio['age_restriction'] ?? null,
-            'url' => $biblio['url'] ?? null,
-            'ean' => $biblio['ean'] ?? null,
-            'notes' => $biblio['notes'] ?? null,
+            'api_title' => cleanTitle($bookData['title']),
+            'api_author' => $bookData['author'],
+            'abstract' => $bookData['abstract'],
+            'subtitle' => $bookData['subtitle'],
+            'publisher' => $bookData['publisher'],
+            'publication_year' => $bookData['publication_year'],
+            'publication_place' => $bookData['publication_place'],
+            'pages' => $bookData['pages'],
+            'material_size' => $bookData['material_size'],
+            'edition_statement' => $bookData['edition_statement'],
+            'series_title' => $bookData['series_title'],
+            'age_restriction' => $bookData['age_restriction'],
+            'url' => $bookData['url'],
+            'ean' => $bookData['ean'],
+            'notes' => $bookData['notes'],
             'image_url' => $image['image_url'],
             'image_cached' => $image['image_cached'],
             'image_cached_url' => $image['image_cached_url'],
-            'item_types' => $biblio['item_types'] ?? null
+            'item_types' => $itemTypesMap === null ? null : ($itemTypesMap[$biblioId] ?? [])
         ];
     }
 
-    return $result;
+    return ['result' => $result, 'directus_ok' => true];
 }
 
 /**
@@ -241,6 +227,4 @@ function processLatestBooks($biblios, $apiBaseUrl, $apiToken, $baseUrl) {
 function generateLatestXmlOutput($result) {
     return generateXmlOutput($result);
 }
-
-// generateErrorXml() delas numera från common.php
 ?>
