@@ -133,6 +133,9 @@ function fetchKohaBatch($itemsUrl, $token, $lastSeenId, $perPage = 500)
  */
 function fetchKohaRequest($itemsUrl, $token, $lastSeenId, $perPage)
 {
+    // Throttle: tät anropstakt har triggat IP-blockering i ImCodes brandvägg (aug 2026)
+    usleep(750000);
+
     $maxRetries = 2;
     $qFilter = json_encode(['item_id' => ['>' => $lastSeenId]]);
     $url = "{$itemsUrl}?_order_by=item_id&_per_page={$perPage}&q=" . urlencode($qFilter);

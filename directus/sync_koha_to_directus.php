@@ -155,6 +155,9 @@ function fetchKohaBiblios($apiBaseUrl, $token, $verbose = false)
         }
 
         $page++;
+
+        // Throttle: tät paginering har triggat IP-blockering i ImCodes brandvägg (aug 2026)
+        usleep(750000);
     }
 
     return $all;

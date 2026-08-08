@@ -70,6 +70,9 @@ function fetchAllKohaHolds($apiBaseUrl, $token)
 
         $allHolds = array_merge($allHolds, $holds);
         $page++;
+
+        // Throttle: tät paginering har triggat IP-blockering i ImCodes brandvägg (aug 2026)
+        usleep(750000);
     }
 
     return $allHolds;
