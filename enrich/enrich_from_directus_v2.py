@@ -44,8 +44,8 @@ DIRECTUS_API_URL = os.getenv('DIRECTUS_API_URL')
 DIRECTUS_API_TOKEN = os.getenv('DIRECTUS_API_TOKEN')
 GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
 
-# Default model
-DEFAULT_MODEL = 'gemini-1.5-flash'
+# Default model. OBS: gemini-1.5-serien är avvecklad ur API:t (404 sedan 2026)
+DEFAULT_MODEL = 'gemini-3-flash-preview'
 DEFAULT_DELAY = 1.0  # seconds between API calls
 
 
