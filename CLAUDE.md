@@ -146,7 +146,7 @@ The final JSON includes 20+ metadata fields per book including ISBN, title, auth
 - **`add_marc_fields.php`** – Migrationsscript som lägger till nya MARC-fält (language_code, subjects_marc, genre_form, sab_classification, contributors) i befintlig Directus-kollektion.
 - **`cleanup_duplicates.php`** – Rensar dubbletter i `kft_koha_biblios`. Kör med `--dry-run` för förhandsvisning.
 - **`rebuild_shelf_snapshots.php`** – Återskapar last-known-good-snapshots för shelf.php från gamla friska cachefiler (hyllmedlemskap) + Directus (färsk metadata) + lokal bildcache. Används när Koha är onåbar. Stöder `--dry-run`, `--shelf=N`, `-v`.
-- **`sync_cron.sh`** – Kör alla syncar i sekvens: Branches → Biblios → Items → Holds → Enrich (1000 böcker) → Qdrant vectors (dagligen kl 03:00). Skickar start/success/fail-ping till healthchecks.io med per-steg-payload (nyckeltal som created/updated/errors). Konfigureras via `HEALTHCHECK_SYNC_ID` i `.env`. Exporterar `~/.local/bin` i PATH för att `uv` ska hittas i cron-miljön.
+- **`sync_cron.sh`** – Kör alla syncar i sekvens: Branches → Biblios → Items → Holds → Enrich (1000 böcker) → Qdrant vectors (dagligen kl 07:30 enligt crontab). Skickar start/success/fail-ping till healthchecks.io med per-steg-payload (nyckeltal som created/updated/errors). Konfigureras via `HEALTHCHECK_SYNC_ID` i `.env`. Exporterar `~/.local/bin` i PATH för att `uv` ska hittas i cron-miljön.
 - **`prepare_embedding_text.php`** – Aggregerar data från alla 4 Directus-kollektioner och bygger strukturerad embedding-text + metadata per biblio. Stöder `--output=json|jsonl|csv`, `--limit=N`, `--biblio-id=N`.
 
 ### Synklogik (sync_koha_to_directus.php)
@@ -267,7 +267,8 @@ The project includes a vector search pipeline that enables hybrid search (semant
 - **Dense vectors**: OpenAI `text-embedding-3-large` (3072 dims, cosine distance) — semantic search
 - **Sparse vectors**: BM25 via `fastembed` with `Qdrant/bm25` model (`Modifier.IDF`) — keyword matching
 - **Fusion**: Reciprocal Rank Fusion (RRF) combines both rankings at query time
-- **Payload indexes**: 12 filterable fields (biblio_id, title, author, isbn, publication_year, publisher, media_types, target_audience, subjects, tags, branches, series_title)
+- **Payload indexes**: filterable fields (biblio_id, title, author, isbn, publication_year, publisher, media_types, target_audience, subjects, tags, branches, available_branches, series_title, language_code, genre_form, subjects_marc, sab_classification, contributors)
+- **`branches` vs `available_branches`**: `branches` = hemfilial (`home_library_id`) för alla aktiva exemplar. `available_branches` = filial där exemplaret *befinner sig* (`holding_library_id`, fallback hemfilial) för exemplar som är tillgängliga (ej utlånade/referens/skadade/förkomna/kasserade – samma villkor som `available_items`). Driver "Finns inne på"-filtret i sökmodulen. Beräknas i `aggregateItemsByBiblio()` i `prepare_embedding_text.php` och ingår **inte** i embedding-texten (skulle tvinga omembedding).
 
 ### Sync Script
 
@@ -276,7 +277,8 @@ The project includes a vector search pipeline that enables hybrid search (semant
 2. Compares SHA256 content hashes with existing Qdrant state (incremental sync)
 3. Generates dense embeddings (OpenAI API) + sparse embeddings (local BM25) for changed records
 4. Upserts to Qdrant with deterministic UUIDs (`uuid5("koha-biblio-{biblio_id}")`)
-5. Deletes entries for biblios no longer active in Directus
+5. Overwrites payload (no re-embedding) for records whose `payload_hash` changed but content did not
+6. Deletes entries for biblios no longer active in Directus
 
 **Usage:**
 ```bash
@@ -291,6 +293,7 @@ uv run sync_to_qdrant.py --limit=50 -v      # Test with 50 books
 
 - **PHP→Python bridge**: `prepare_embedding_text.php` är single source of truth för embedding-text och metadata. Python anropar den via subprocess och parsar JSONL.
 - **Inkrementell sync**: SHA256 av embedding-texten sparas som `content_hash` i Qdrant payload. Bara ändrade poster omgenereras (~$0.01-0.03/dag vs ~$0.73 för full sync).
+- **Payload-only-uppdateringar**: SHA256 av payloaden (exkl. `last_synced`, `content_hash`, `payload_hash`) sparas som `payload_hash`. Är content-hashen oförändrad men payload-hashen skiljer skrivs payloaden över via `batch_update_points` + `OverwritePayloadOperation` – vektorerna behålls, inget OpenAI-anrop. Fångar t.ex. ändrad `available_branches` utan ändrat antal, och gör att nya payload-fält når alla ~68k punkter utan `--force`. Rapporteras som `Payload-uppd.:` i statistiken och cron-loggen.
 - **IPv4-workaround**: Qdrant-servern har AAAA-records men lyssnar inte på IPv6. Scriptet tvingar IPv4 via socket monkey-patch (samma som crawler-projektet).
 - **BM25 sparse vectors**: Genereras lokalt (ingen API-kostnad). IDF-viktning beräknas server-side av Qdrant.
 - **Cron**: Körs som steg 6 i `sync_cron.sh` (efter Branches → Biblios → Items → Holds → Enrich).

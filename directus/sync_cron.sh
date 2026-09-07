@@ -186,7 +186,7 @@ if [ -d "$QDRANT_DIR" ]; then
 
     echo "$qdrant_output" >> "$LOG_FILE"
 
-    qdrant_stats=$(echo "$qdrant_output" | grep -E '^\s*(Upsertade|Raderade|Oförändrade|Tid):' | sed 's/^[[:space:]]*//' | head -5)
+    qdrant_stats=$(echo "$qdrant_output" | grep -E '^\s*(Upsertade|Payload-uppd\.|Raderade|Oförändrade|Tid):' | sed 's/^[[:space:]]*//' | head -6)
 
     if [ $qdrant_exit -eq 0 ]; then
         echo "[$STEP_TIMESTAMP] Qdrant vectors: SUCCESS" >> "$LOG_FILE"

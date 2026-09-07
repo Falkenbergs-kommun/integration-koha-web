@@ -153,6 +153,7 @@ function aggregateItemsByBiblio($items)
                 'collection_codes' => [],
                 'locations' => [],
                 'branches' => [],
+                'available_branches' => [],
                 'callnumbers' => [],
             ];
         }
@@ -169,6 +170,13 @@ function aggregateItemsByBiblio($items)
 
         if ($isAvailable) {
             $agg['available_items']++;
+
+            // Filial där exemplaret befinner sig just nu (holdingbranch) – driver
+            // "Finns inne på"-filtret i sökmodulen. Fallback till hemfilial.
+            $loc = $item['holding_library_id'] ?? $item['home_library_id'] ?? null;
+            if ($loc !== null) {
+                $agg['available_branches'][$loc] = true;
+            }
         }
 
         // Samla unika mediatyper
@@ -474,6 +482,7 @@ function buildMetadata($biblio, $enriched, $itemAgg, $holdData, $itemTypeLabels)
         $meta['total_items'] = $itemAgg['total_items'];
         $meta['available_items'] = $itemAgg['available_items'];
         $meta['branches'] = array_keys($itemAgg['branches'] ?? []);
+        $meta['available_branches'] = array_keys($itemAgg['available_branches'] ?? []);
     }
 
     // Reservationer
@@ -634,7 +643,7 @@ function main()
     // ── Steg 3: Hämta items ──
     echo "Steg 3/4: Hämtar items och aggregerar per biblio...\n";
     $itemFields = 'biblio_id,item_type_id,effective_item_type_id,collection_code,'
-        . 'callnumber,home_library_id,location,permanent_location,'
+        . 'callnumber,home_library_id,holding_library_id,location,permanent_location,'
         . 'checked_out_date,not_for_loan_status,damaged_status,lost_status,withdrawn,status';
 
     $items = fetchAllFromCollection($client, 'kft_koha_items', $itemFields, ['status' => ['_eq' => 'active']], $verbose);

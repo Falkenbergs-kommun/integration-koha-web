@@ -11,6 +11,12 @@ Användning:
     uv run sync_to_qdrant.py --limit=50         # Synka max 50 biblios
     uv run sync_to_qdrant.py --force            # Omgenerera alla embeddings
     uv run sync_to_qdrant.py --verbose          # Detaljerad loggning
+
+Change detection sker i två lager:
+  - content_hash (SHA256 av embedding_text): ändrad → ny embedding + upsert
+  - payload_hash (SHA256 av payload utan volatila nycklar): ändrad men
+    content oförändrad → payload skrivs över utan omembedding (t.ex. när
+    available_branches ändras, eller när nya payload-fält introduceras)
 """
 
 from __future__ import annotations
@@ -35,8 +41,10 @@ from qdrant_client.models import (
     FieldCondition,
     Filter,
     MatchValue,
+    OverwritePayloadOperation,
     PayloadSchemaType,
     PointStruct,
+    SetPayload,
     SparseVector,
     SparseVectorParams,
     TextIndexParams,
@@ -51,6 +59,10 @@ EMBEDDING_MODEL = "text-embedding-3-large"
 DIMENSIONS = 3072
 EMBEDDING_BATCH_SIZE = 100
 QDRANT_UPSERT_BATCH_SIZE = 100
+QDRANT_PAYLOAD_BATCH_SIZE = 100
+
+# Payload-nycklar som inte ingår i payload_hash (ändras varje körning / är hashar)
+PAYLOAD_HASH_EXCLUDE = {"last_synced", "content_hash", "payload_hash"}
 SYNC_CHUNK_SIZE = 1000
 MAX_RETRIES = 3
 
@@ -149,6 +161,7 @@ def ensure_collection(client: QdrantClient) -> bool:
         ("subjects", PayloadSchemaType.KEYWORD),
         ("tags", PayloadSchemaType.KEYWORD),
         ("branches", PayloadSchemaType.KEYWORD),
+        ("available_branches", PayloadSchemaType.KEYWORD),
         ("series_title", PayloadSchemaType.KEYWORD),
         ("language_code", PayloadSchemaType.KEYWORD),
         ("genre_form", PayloadSchemaType.KEYWORD),
@@ -183,6 +196,7 @@ def ensure_indexes(client: QdrantClient) -> None:
     """Skapa saknade payload-index på befintlig collection (idempotent)."""
     new_indexes = [
         ("language_code", PayloadSchemaType.KEYWORD),
+        ("available_branches", PayloadSchemaType.KEYWORD),
         ("genre_form", PayloadSchemaType.KEYWORD),
         ("subjects_marc", PayloadSchemaType.KEYWORD),
         ("sab_classification", PayloadSchemaType.KEYWORD),
@@ -254,6 +268,13 @@ def content_hash(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
+def payload_hash(payload: dict) -> str:
+    """SHA256-hash av payload (utan volatila nycklar) för payload-only change detection."""
+    stable = {k: v for k, v in payload.items() if k not in PAYLOAD_HASH_EXCLUDE}
+    encoded = json.dumps(stable, sort_keys=True, ensure_ascii=False, default=str)
+    return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
+
+
 def parse_publication_year(year_str: str | None) -> int | None:
     """Extrahera årtal som heltal från varierade format."""
     if not year_str:
@@ -267,15 +288,15 @@ def parse_publication_year(year_str: str | None) -> int | None:
 # ─── Hämta befintligt tillstånd från Qdrant ──────────────────────────
 
 
-def get_existing_state(client: QdrantClient, verbose: bool) -> dict[int, tuple[str, str]]:
-    """Hämta {biblio_id: (point_id, content_hash)} för alla punkter i collectionen."""
-    state: dict[int, tuple[str, str]] = {}
+def get_existing_state(client: QdrantClient, verbose: bool) -> dict[int, tuple[str, str, str]]:
+    """Hämta {biblio_id: (point_id, content_hash, payload_hash)} för alla punkter i collectionen."""
+    state: dict[int, tuple[str, str, str]] = {}
     offset = None
 
     while True:
         points, offset = client.scroll(
             collection_name=COLLECTION_NAME,
-            with_payload=["biblio_id", "content_hash"],
+            with_payload=["biblio_id", "content_hash", "payload_hash"],
             with_vectors=False,
             limit=100,
             offset=offset,
@@ -284,8 +305,9 @@ def get_existing_state(client: QdrantClient, verbose: bool) -> dict[int, tuple[s
         for p in points:
             bid = p.payload.get("biblio_id")
             chash = p.payload.get("content_hash", "")
+            phash = p.payload.get("payload_hash", "")
             if bid is not None:
-                state[int(bid)] = (p.id, chash)
+                state[int(bid)] = (p.id, chash, phash)
 
         if offset is None:
             break
@@ -371,6 +393,7 @@ def build_payload(record: dict, hash_val: str) -> dict:
         "subjects": meta.get("subjects", []),
         "tags": meta.get("tags", []),
         "branches": meta.get("branches", []),
+        "available_branches": meta.get("available_branches", []),
         "series_title": meta.get("series_title"),
         "part_number": meta.get("part_number"),
         "part_name": meta.get("part_name"),
@@ -393,6 +416,7 @@ def build_payload(record: dict, hash_val: str) -> dict:
         "content_hash": hash_val,
         "last_synced": datetime.now(timezone.utc).isoformat(),
     }
+    payload["payload_hash"] = payload_hash(payload)
 
     return payload
 
@@ -444,6 +468,7 @@ def sync(force: bool, limit: int | None, dry_run: bool, verbose: bool) -> None:
     # Klassificera poster
     php_biblio_ids = set()
     to_embed = []
+    to_payload = []  # (point_id, payload) – content oförändrad, bara payload skiljer
     unchanged = 0
 
     for record in records:
@@ -457,21 +482,29 @@ def sync(force: bool, limit: int | None, dry_run: bool, verbose: bool) -> None:
 
         if force or bid not in existing or existing[bid][1] != new_hash:
             to_embed.append((record, new_hash))
+            continue
+
+        # Content oförändrad – kolla om payload (t.ex. available_branches) ändrats
+        point_id, _, old_phash = existing[bid]
+        new_payload = build_payload(record, new_hash)
+        if new_payload["payload_hash"] != old_phash:
+            to_payload.append((point_id, new_payload))
         else:
             unchanged += 1
 
     # Hitta borttagna (finns i Qdrant men inte i PHP-output)
     to_delete = []
-    for bid, (point_id, _) in existing.items():
+    for bid, (point_id, _, _) in existing.items():
         if bid not in php_biblio_ids:
             to_delete.append((bid, point_id))
 
-    print(f"  Nya/ändrade: {len(to_embed)}")
-    print(f"  Oförändrade: {unchanged}")
-    print(f"  Att radera:  {len(to_delete)}")
+    print(f"  Nya/ändrade:   {len(to_embed)}")
+    print(f"  Payload-uppd.: {len(to_payload)}")
+    print(f"  Oförändrade:   {unchanged}")
+    print(f"  Att radera:    {len(to_delete)}")
     print()
 
-    if len(to_embed) == 0 and len(to_delete) == 0:
+    if len(to_embed) == 0 and len(to_payload) == 0 and len(to_delete) == 0:
         print("Allt är uppdaterat. Inget att göra.")
         return
 
@@ -527,6 +560,25 @@ def sync(force: bool, limit: int | None, dry_run: bool, verbose: bool) -> None:
 
         print(f"  Upsertade {total_upserted} punkter")
 
+    # Payload-only-uppdateringar (ingen omembedding – vektorerna behålls)
+    if to_payload:
+        print(f"\nSkriver över payload för {len(to_payload)} punkter (utan omembedding)...")
+        total_payload = 0
+        for j in range(0, len(to_payload), QDRANT_PAYLOAD_BATCH_SIZE):
+            batch = to_payload[j:j + QDRANT_PAYLOAD_BATCH_SIZE]
+            client.batch_update_points(
+                collection_name=COLLECTION_NAME,
+                update_operations=[
+                    OverwritePayloadOperation(
+                        overwrite_payload=SetPayload(payload=payload, points=[point_id])
+                    )
+                    for point_id, payload in batch
+                ],
+            )
+            total_payload += len(batch)
+            if verbose or total_payload % 10000 == 0 or total_payload == len(to_payload):
+                print(f"  {total_payload}/{len(to_payload)} payloads uppdaterade")
+
     # Radera borttagna (hoppa över vid --limit, ofullständig dataset)
     if to_delete:
         if limit:
@@ -549,10 +601,11 @@ def sync(force: bool, limit: int | None, dry_run: bool, verbose: bool) -> None:
     print("=" * 60)
     print("  KLAR")
     print("=" * 60)
-    print(f"  Upsertade:  {len(to_embed)}")
-    print(f"  Raderade:   {actually_deleted}")
-    print(f"  Oförändrade:{unchanged}")
-    print(f"  Tid:        {duration:.1f}s")
+    print(f"  Upsertade:     {len(to_embed)}")
+    print(f"  Payload-uppd.: {len(to_payload)}")
+    print(f"  Raderade:      {actually_deleted}")
+    print(f"  Oförändrade:   {unchanged}")
+    print(f"  Tid:           {duration:.1f}s")
     print("=" * 60)
     print()
 
