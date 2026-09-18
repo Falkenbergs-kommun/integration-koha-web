@@ -158,6 +158,11 @@ if ($format === 'xml') {
     $xml = new SimpleXMLElement('<?xml version="1.0" encoding="UTF-8"?><response></response>');
 
     foreach ($result as $key => $value) {
+        // Array-fält (t.ex. series_title) serialiseras som JSON — htmlspecialchars
+        // på array är fatal TypeError i PHP 8. Samma skydd som generateXmlOutput().
+        if (is_array($value)) {
+            $value = json_encode($value, JSON_UNESCAPED_UNICODE);
+        }
         if ($value !== null && $value !== '') {
             $xml->addChild($key, htmlspecialchars($value));
         } else {
