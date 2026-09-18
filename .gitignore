@@ -2,9 +2,9 @@
 cache/
 images/
 qdrant/.venv/
-qdrant/uv.lock
 enrich/.venv/
-enrich/uv.lock
 *.log
 *.log.old
 __pycache__/
+
+# uv.lock committas MEDVETET (pinnar transitiva versioner för säkerhetsrevision)

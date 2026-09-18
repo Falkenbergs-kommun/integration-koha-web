@@ -311,6 +311,29 @@ curl -H "api-key: KEY" "https://qdrant.utvecklingfalkenberg.se/collections/koha-
 curl -H "api-key: KEY" "https://qdrant.utvecklingfalkenberg.se/collections/koha-biblios" | jq '.result.points_count'
 ```
 
+## Beroenden och sårbarhetsgranskning
+
+**PHP har noll tredjepartsberoenden** (ingen composer.json, ingen `vendor/`). Behåll det — hela den klassiska PHP-supply-chain-ytan saknas därmed.
+
+**Python-projekten (`enrich/`, `qdrant/`) hanteras med uv.** `uv.lock` **committas medvetet** i båda. Lockfilen är inte en byggartefakt utan projektets viktigaste säkerhetsfil: den är enda stället som svarar på "vilken version av urllib3 kördes i natt?". Lägg dem aldrig i `.gitignore` igen.
+
+### Versionspolicy
+
+- **Direkta beroenden** har minimigränser i `[project.dependencies]`.
+- **Transitiva beroenden** med kända sårbarheter pinnas via `[tool.uv] constraint-dependencies`. Constraints lägger inte till paket, de sätter bara golv om paketet ändå dras in — rätt verktyg för att hindra att t.ex. `pillow` (via `fastembed`) glider tillbaka till en sårbar version.
+- **Major-versioner höjs medvetet, aldrig som sidoeffekt av en säkerhetsuppgradering.** `google-genai` är låst till `<2` och `openai` till `<3` av just det skälet; `uv lock --upgrade` ville annars dra in 2.x respektive 3.x utan att någon CVE krävde det. Höj dem i en egen commit med egen testning.
+
+### Granska sårbarheter
+
+`pip-audit` kan inte bygga venv på den här servern (`ensurepip` saknas i Debians python3.11). Fråga OSV.dev direkt i stället:
+
+```bash
+cd enrich && uv export --no-hashes --no-emit-project > /tmp/req.txt
+# POST:a paket+version till https://api.osv.dev/v1/querybatch och läs av 'vulns'
+```
+
+Efter varje `uv lock --upgrade`: kör granskningen igen, `uv sync`, och verifiera att scripten faktiskt startar — `uv run enrich_from_directus.py --dry-run --limit 1` och `uv run sync_to_qdrant.py --dry-run --limit=5 -v`. Dry-run-utskriften "Att radera: 68108" vid `--limit` är normal och ofarlig: delete hoppas över när `--limit` är satt (sync_to_qdrant.py rad ~583).
+
 ## Code Style Conventions
 - Swedish comments and variable names (bibliotek domain language)
 - Functions return structured arrays, not objects

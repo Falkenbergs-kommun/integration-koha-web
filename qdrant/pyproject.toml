@@ -3,10 +3,24 @@ name = "koha-qdrant-sync"
 version = "0.1.0"
 requires-python = ">=3.11"
 dependencies = [
-    "openai>=1.0",
+    # Låst till 2.x: 3.x är en brytande major-release och ingen av
+    # säkerhetsfixarna kräver den. Höj medvetet, inte som sidoeffekt.
+    "openai>=2.29,<3",
     "qdrant-client>=1.12",
     "fastembed>=0.3",
-    "python-dotenv",
+    "python-dotenv>=1.2.2",
+]
+
+[tool.uv]
+# Minimigränser för TRANSITIVA beroenden med kända sårbarheter (OSV, sep 2026).
+constraint-dependencies = [
+    "pillow>=12.3.0",  # 36 CVE:er i 12.1.1 (dras in av fastembed)
+    "urllib3>=2.7.0",
+    "idna>=3.15",
+    "h2>=4.4.1",
+    "click>=8.3.3",
+    "pygments>=2.20.0",
+    "requests>=2.33.0",
 ]
 
 [project.scripts]
