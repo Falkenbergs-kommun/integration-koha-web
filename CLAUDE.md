@@ -56,7 +56,7 @@ Lägg ALLA nya webb-endpoints och statiska resurser i `public/`. Endpoints i `pu
 - `parseFilterParam($raw, $paramName, $maxValues, $maxLength)` - Validerar och normaliserar kommaseparerade filtervärden från query-strängen. Värdena ingår i cache-filnamn, så bara `[A-Z0-9_-]` tillåts; ogiltiga värden avvisas i stället för att rensas (rensning kan få olika indata att dela cache-nyckel). Returnerar `['ok', 'values', 'error']`
 - `sendErrorResponse($httpCode, $format, $payload)` - Skickar felsvar i json eller xml och avslutar requesten
 - `extractBiblioId($url)` - Parse biblionumber from Koha URLs using regex
-- `getFirstIsbn($isbnString)` - Extract first ISBN from pipe/comma-separated lists
+- `getFirstIsbn($isbnString)` - Extract first ISBN from pipe/comma-separated lists. Returvärdet blir **filnamn** i `public/images/` och del av Syndetics-URL:en, så bara `[0-9X]` släpps igenom: funktionen plockar ut första `[0-9]{7,12}[0-9X]`-token ur värdet i stället för att bara strippa blanksteg/bindestreck. Längdintervallet 8–13 rymmer ISBN-10/13 och de 8-siffriga ISSN som ligger i isbn-fältet för tidskrifter. Katalogskräp som `9781476729084(hardcover)` och `0571192890;` ger nu rena nummer; `../../../etc/passwd` ger `null`.
 - `getImageUrl($isbn)` - Build Syndetics image URL from ISBN
 - `cacheImage($isbn, $syndeticsUrl)` - Download and locally cache book covers to `public/images/` (note: relativt common.php's plats i repo-roten, så `__DIR__ . '/public/images'`)
 - `fetchRssFeed($rssUrl)` - Robust RSS fetching with cookies and user agent

@@ -372,7 +372,16 @@ function getFirstIsbn($isbnString) {
     // Ta bort eventuella bindestreck och mellanslag
     $cleanIsbn = preg_replace('/[\s-]/', '', $firstIsbn);
 
-    return $cleanIsbn ?: null;
+    // Returvärdet blir filnamn i public/images/ och ingår i Syndetics-URL:en,
+    // så bara [0-9X] får passera. Katalogdata innehåller skräp som
+    // "9781476729084(hardcover)" och "0571192890;" — plocka ut själva numret
+    // i stället för att kasta hela värdet. Längden 8–13 rymmer både ISBN-10/13
+    // och de 8-siffriga ISSN som ligger i isbn-fältet för tidskrifter.
+    if (preg_match('/[0-9]{7,12}[0-9X]/i', $cleanIsbn, $m)) {
+        return strtoupper($m[0]);
+    }
+
+    return null;
 }
 
 // Funktion för att rensa avslutande / och : från titel
@@ -392,7 +401,10 @@ function getImageUrl($isbn) {
     }
 
     $client = getenv('SYNDETICS_CLIENT') ?: 'bibfalken';
-    return "https://secure.syndetics.com/index.aspx?isbn={$isbn}/LC.JPG&client={$client}&type=xw12";
+    // ISBN är redan teckenvaliderat av getFirstIsbn(), men koda ändå — det gör
+    // funktionen ofarlig även om den anropas med ett ovaliderat värde.
+    return "https://secure.syndetics.com/index.aspx?isbn=" . rawurlencode($isbn)
+         . "/LC.JPG&client=" . rawurlencode($client) . "&type=xw12";
 }
 
 // Funktion för att ladda ner och cacha bild
