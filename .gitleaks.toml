@@ -1,0 +1,17 @@
+# gitleaks-konfiguration för integration-koha-web.
+#
+# Behåller alla standardregler (extend.useDefault) och lägger BARA till en
+# allowlist för de platshållarvärden som dokumentationen använder i curl-exempel.
+# Allowlistan matchar VÄRDET, inte filen — en riktig, högentropisk token som
+# klistras in i samma docs fångas därför fortfarande. Det var så den läckta
+# Directus-token upptäcktes; den skyddet får inte tas bort.
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Dokumentationens platshållare i curl-exempel — inte riktiga hemligheter"
+regexes = [
+  '''(?i)YOUR[_-]?(DIRECTUS[_-]?)?TOKEN''',   # YOUR_TOKEN, YOUR_DIRECTUS_TOKEN
+  '''^koha:koha$''',                           # Kohas genererade openapi-exempel mot localhost
+]
