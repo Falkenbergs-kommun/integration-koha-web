@@ -44,14 +44,43 @@ if ($format === 'xml') {
 header('Access-Control-Allow-Origin: *');
 header('Cache-Control: no-cache, must-revalidate');
 
+// Säkerställ att cache-katalogen finns
+$cacheDir = __DIR__ . '/../cache';
+if (!is_dir($cacheDir)) {
+    mkdir($cacheDir, 0755, true);
+}
+
 // Cache-fil baserat på biblionumber och format
-$cacheFile = __DIR__ . "/../cache/cache_book{$biblioId}_{$format}.cache";
+$cacheFile = "{$cacheDir}/cache_book{$biblioId}_{$format}.cache";
+// Negativ cache: markerar att biblionumret inte finns i Koha. Utan den ger
+// iteration över godtyckliga biblionummer ett Koha-anrop per request, eftersom
+// 404-svar annars aldrig cachas. Formatoberoende — existensen är densamma.
+$missFile = "{$cacheDir}/miss_book{$biblioId}.flag";
+// Fail-throttle vid Koha-fel, delad för alla böcker (samma uppströmskälla)
+$failFlagFile = "{$cacheDir}/fail_book.flag";
 $cacheMaxAge = 3600; // Cache i 1 timme
+$missMaxAge = intval(getenv('CACHE_TTL_BOOK_MISS') ?: 3600); // Negativ cache 1 timme
 
 // Kolla om cache finns och är giltig
 if (file_exists($cacheFile) && (time() - filemtime($cacheFile)) < $cacheMaxAge) {
     echo file_get_contents($cacheFile);
     exit;
+}
+
+// Känd miss inom TTL: svara 404 utan att röra Koha
+if (file_exists($missFile) && (time() - filemtime($missFile)) < $missMaxAge) {
+    sendErrorResponse(404, $format, [
+        'status' => 'error',
+        'message' => 'Ingen bok hittades med biblionumber ' . $biblioId
+    ]);
+}
+
+// Fail-throttle: vid nyligt Koha-fel, svara direkt utan nytt försök
+if (recentFailureExists($failFlagFile)) {
+    sendErrorResponse(503, $format, [
+        'status' => 'error',
+        'message' => 'Koha tillfälligt onåbar (throttlad efter tidigare fel)'
+    ]);
 }
 
 // Hämta konfiguration från .env
@@ -64,21 +93,11 @@ $clientSecret = getenv('CLIENT_SECRET');
 // Hämta OAuth-token
 $apiToken = getOAuthToken($oauthUrl, $clientId, $clientSecret);
 if (!$apiToken) {
-    http_response_code(500);
-    $errorResponse = [
+    markFailure($failFlagFile);
+    sendErrorResponse(500, $format, [
         'status' => 'error',
         'message' => 'Kunde inte hämta OAuth-token'
-    ];
-
-    if ($format === 'xml') {
-        $xml = new SimpleXMLElement('<?xml version="1.0" encoding="UTF-8"?><response></response>');
-        $xml->addChild('status', 'error');
-        $xml->addChild('message', htmlspecialchars($errorResponse['message']));
-        echo $xml->asXML();
-    } else {
-        echo json_encode($errorResponse, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
-    }
-    exit;
+    ]);
 }
 
 // Hämta bokdata från API
@@ -86,22 +105,15 @@ $bookData = getBookDataFromApi($biblioId, $apiBaseUrl, $apiToken);
 
 // Kontrollera om boken hittades
 if (!$bookData['title'] && !$bookData['isbn']) {
-    http_response_code(404);
-    $errorResponse = [
+    @touch($missFile);
+    sendErrorResponse(404, $format, [
         'status' => 'error',
         'message' => 'Ingen bok hittades med biblionumber ' . $biblioId
-    ];
-
-    if ($format === 'xml') {
-        $xml = new SimpleXMLElement('<?xml version="1.0" encoding="UTF-8"?><response></response>');
-        $xml->addChild('status', 'error');
-        $xml->addChild('message', htmlspecialchars($errorResponse['message']));
-        echo $xml->asXML();
-    } else {
-        echo json_encode($errorResponse, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
-    }
-    exit;
+    ]);
 }
+
+// Lyckad hämtning: nollställ fail-flagga
+@unlink($failFlagFile);
 
 // Extrahera första ISBN och resolva bildtrippel (Syndetics eller Kohas lokala omslag)
 $firstIsbn = getFirstIsbn($bookData['isbn']);
