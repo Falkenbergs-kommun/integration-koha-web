@@ -118,8 +118,9 @@ curl http://localhost/bibliotek/debug.php
 
 ### Security Considerations
 - **TLS-verifiering är PÅ** (`CURLOPT_SSL_VERIFYPEER = true` + `CURLOPT_SSL_VERIFYHOST = 2`) i alla curl-anrop sedan 2026-09. Den var tidigare avstängd överallt, inklusive i `getOAuthToken()` som skickar `CLIENT_ID` och `CLIENT_SECRET` — där innebar det att en MITM kunde stjäla Koha-credentials. Samtliga uppströmsvärdar (Koha API, OAuth, OPAC/RSS, Syndetics, Directus) är verifierade att ha giltiga certifikat. **Stäng inte av det igen** för att "få något att fungera"; felsök certifikatkedjan i stället.
-- No input sanitization beyond numeric validation on list ID - risk is minimal given controlled data sources
-- OAuth credentials stored in .env file (properly gitignored)
+- **All query-input valideras vid ingången**, inte "risken är låg för att datakällorna är kontrollerade": `?id`/`?biblionumber` med `ctype_digit`/`intval`, filter med `parseFilterParam()`, `?limit` med golv OCH tak. Regeln är att varje värde som når ett filnamn, en URL eller ett Directus-filter måste vara teckenvaliderat först — katalogdata räknas också som otrodd indata (se `getFirstIsbn()`).
+- OAuth credentials stored in .env file (properly gitignored, 0600, utanför webbroten)
+- **Committa aldrig tokens, inte ens i dokumentation.** `directus/README.md` innehöll fram till 2026-09 en skarp `DIRECTUS_API_TOKEN` i ett exempelblock. Den är återkallad (verifierad HTTP 401) och borttagen ur arbetskopian, men ligger kvar i git-historiken — historiken är inte omskriven eftersom token är död. Använd `$DIRECTUS_API_TOKEN` eller `<platshållare>` i exempel.
 
 ### API Response Structure
 The final JSON includes 20+ metadata fields per book including ISBN, title, author, abstract, subtitle, publisher, publication year/place, pages, material size, edition, series (as JSON array), age restriction, URL, EAN, and notes. `series_title` is an array of objects `[{"name": "...", "volume": "del 3", "issn": "..."}]|null` — a book can belong to multiple series (MARC 490 repeatable field), each with optional volume/part number and ISSN. Always maintain this comprehensive structure when modifying data processing.

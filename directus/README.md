@@ -18,10 +18,10 @@ Detta system hämtar böcker från Koha bibliotekssystem via API och synkroniser
 
 ### 2. Konfiguration
 
-Directus credentials finns redan i `.env`:
+Directus credentials finns i `.env` (committa dem aldrig — se `.env.example` för mall):
 ```env
 DIRECTUS_API_URL=https://nav.utvecklingfalkenberg.se
-DIRECTUS_API_TOKEN=fGw_FW-mzf7BxRAbcRhj3EMS-rc3CoAZ
+DIRECTUS_API_TOKEN=<din-directus-token>
 ```
 
 ### 3. Skapa Collection (En gång)
@@ -303,15 +303,15 @@ Kontrollera:
 
 ```bash
 # Hämta första 5 biblios
-curl -H "Authorization: Bearer fGw_FW-mzf7BxRAbcRhj3EMS-rc3CoAZ" \
+curl -H "Authorization: Bearer $DIRECTUS_API_TOKEN" \
   "https://nav.utvecklingfalkenberg.se/items/kft_koha_biblios?limit=5" | jq .
 
 # Hämta specifik biblio
-curl -H "Authorization: Bearer fGw_FW-mzf7BxRAbcRhj3EMS-rc3CoAZ" \
+curl -H "Authorization: Bearer $DIRECTUS_API_TOKEN" \
   "https://nav.utvecklingfalkenberg.se/items/kft_koha_biblios/71069" | jq .
 
 # Räkna totalt antal
-curl -H "Authorization: Bearer fGw_FW-mzf7BxRAbcRhj3EMS-rc3CoAZ" \
+curl -H "Authorization: Bearer $DIRECTUS_API_TOKEN" \
   "https://nav.utvecklingfalkenberg.se/items/kft_koha_biblios?limit=1&meta=*" | jq '.meta.filter_count'
 ```
 
