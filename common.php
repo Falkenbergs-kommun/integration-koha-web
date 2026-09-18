@@ -1188,4 +1188,54 @@ function recentFailureExists($flagFile, $seconds = null) {
 function markFailure($flagFile) {
     @touch($flagFile);
 }
+
+// Validera och normalisera ett kommaseparerat filtervärde från query-strängen.
+// Värdena används både i Directus-filter och som del av cache-filnamn, så bara
+// tecken som är ofarliga i båda kontexterna tillåts — ett ovaliderat värde kan
+// annars skapa godtyckliga filer i cache-katalogen (diskutmattning) och i värsta
+// fall ta sig ur den. Ogiltiga värden avvisas hellre än rensas, eftersom rensning
+// kan få två olika indata att dela cache-nyckel.
+// Returnerar ['ok' => bool, 'values' => string[], 'error' => string|null]
+function parseFilterParam($raw, $paramName, $maxValues = 20, $maxLength = 32) {
+    if ($raw === null || trim($raw) === '') {
+        return ['ok' => true, 'values' => [], 'error' => null];
+    }
+
+    $values = array_filter(array_map('trim', explode(',', $raw)), function ($v) {
+        return $v !== '';
+    });
+
+    if (count($values) > $maxValues) {
+        return ['ok' => false, 'values' => [], 'error' => "För många värden i {$paramName} (max {$maxValues})"];
+    }
+
+    $clean = [];
+    foreach ($values as $value) {
+        $value = strtoupper($value);
+        if (!preg_match('/^[A-Z0-9_-]{1,' . intval($maxLength) . '}$/', $value)) {
+            return [
+                'ok' => false,
+                'values' => [],
+                'error' => "Ogiltigt värde i {$paramName}: endast A-Z, 0-9, _ och - tillåts (max {$maxLength} tecken)"
+            ];
+        }
+        $clean[] = $value;
+    }
+
+    // Unika värden håller cache-nyckeln bunden — ?location=MAG,MAG,MAG ska inte
+    // ge en ny fil per upprepning. Sortering ger konsistent nyckel oavsett ordning.
+    $clean = array_values(array_unique($clean));
+    sort($clean);
+
+    return ['ok' => true, 'values' => $clean, 'error' => null];
+}
+
+// Skicka ett felsvar i rätt format och avsluta requesten.
+function sendErrorResponse($httpCode, $format, array $errorPayload) {
+    http_response_code($httpCode);
+    echo $format === 'xml'
+        ? generateErrorXml($errorPayload)
+        : json_encode($errorPayload, JSON_UNESCAPED_UNICODE);
+    exit;
+}
 ?>

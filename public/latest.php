@@ -9,41 +9,8 @@ require_once __DIR__ . '/../common.php';
 // Ladda .env-fil
 loadEnv(__DIR__ . '/../.env');
 
-// Hämta format från GET
+// Hämta och validera format först — felsvar måste kunna skickas i rätt format
 $format = isset($_GET['format']) ? strtolower($_GET['format']) : 'json';
-$limit = isset($_GET['limit']) ? min(intval($_GET['limit']), 50) : 10;
-
-// Hämta och validera item_type_id filter (kommaseparerad lista)
-$itemTypeIds = [];
-if (isset($_GET['item_type_id']) && !empty(trim($_GET['item_type_id']))) {
-    $itemTypeIds = array_filter(
-        array_map('trim', array_map('strtoupper', explode(',', $_GET['item_type_id']))),
-        function($id) { return !empty($id); }
-    );
-    sort($itemTypeIds); // Normalisera ordning för konsistenta cache-nycklar
-}
-
-// Hämta och validera location filter (kommaseparerad lista, samma mönster som item_type_id)
-$locations = [];
-if (isset($_GET['location']) && !empty(trim($_GET['location']))) {
-    $locations = array_filter(
-        array_map('trim', array_map('strtoupper', explode(',', $_GET['location']))),
-        function($v) { return !empty($v); }
-    );
-    sort($locations);
-}
-
-// Hämta och validera ccode filter (kommaseparerad lista, mappas till collection_code)
-$ccodes = [];
-if (isset($_GET['ccode']) && !empty(trim($_GET['ccode']))) {
-    $ccodes = array_filter(
-        array_map('trim', array_map('strtoupper', explode(',', $_GET['ccode']))),
-        function($v) { return !empty($v); }
-    );
-    sort($ccodes);
-}
-
-// Validera format
 if (!in_array($format, ['json', 'xml'])) {
     $format = 'json';
 }
@@ -56,6 +23,32 @@ if ($format === 'xml') {
 }
 header('Access-Control-Allow-Origin: *');
 header('Cache-Control: no-cache, must-revalidate');
+
+// Golv OCH tak på limit. Utan golv går negativa värden vidare till Directus,
+// där limit=-1 betyder "obegränsat" — en enda request skulle då dra hem hela
+// katalogen (~68k poster) med bulk-metadata och omslagshämtning per bok.
+$limit = isset($_GET['limit']) ? max(min(intval($_GET['limit']), 50), 1) : 10;
+
+// Hämta och validera filter (kommaseparerade listor). Värdena ingår i
+// cache-filnamnen, så de valideras strikt av parseFilterParam().
+$filterParams = [
+    'item_type_id' => [],
+    'location'     => [],
+    'ccode'        => [],
+];
+foreach (array_keys($filterParams) as $param) {
+    $parsed = parseFilterParam($_GET[$param] ?? null, $param);
+    if (!$parsed['ok']) {
+        sendErrorResponse(400, $format, [
+            'status' => 'error',
+            'message' => $parsed['error']
+        ]);
+    }
+    $filterParams[$param] = $parsed['values'];
+}
+$itemTypeIds = $filterParams['item_type_id'];
+$locations   = $filterParams['location'];
+$ccodes      = $filterParams['ccode'];
 
 // Cache-fil baserat på format, antal och aktiva filter.
 // Tomma suffix bevarar befintliga cache-nycklar oförändrade (bakåtkompatibilitet).
