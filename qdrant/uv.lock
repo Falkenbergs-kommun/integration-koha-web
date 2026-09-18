@@ -10,6 +10,7 @@ resolution-markers = [
 
 [manifest]
 constraints = [
+    { name = "anyio", specifier = ">=4.14.2" },
     { name = "click", specifier = ">=8.3.3" },
     { name = "h2", specifier = ">=4.4.1" },
     { name = "idna", specifier = ">=3.15" },

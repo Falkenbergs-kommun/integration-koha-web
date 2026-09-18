@@ -18,6 +18,8 @@ dependencies = [
 [tool.uv]
 # Minimigränser för TRANSITIVA beroenden med kända sårbarheter (OSV, sep 2026).
 constraint-dependencies = [
+    "anyio>=4.14.2",  # TLS-certifikatspoofing via IDNA 2003-kodade värdnamn
+                      # (GHSA-82r6-8w77-94w6), fixad i 4.14.2. Dras in av httpx.
     "pillow>=12.3.0",  # 36 CVE:er i 12.1.1 (dras in av fastembed)
     "urllib3>=2.7.0",
     "idna>=3.15",

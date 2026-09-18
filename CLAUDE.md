@@ -321,6 +321,7 @@ curl -H "api-key: KEY" "https://qdrant.utvecklingfalkenberg.se/collections/koha-
 
 - **Direkta beroenden** har minimigränser i `[project.dependencies]`.
 - **Transitiva beroenden** med kända sårbarheter pinnas via `[tool.uv] constraint-dependencies`. Constraints lägger inte till paket, de sätter bara golv om paketet ändå dras in — rätt verktyg för att hindra att t.ex. `pillow` (via `fastembed`) glider tillbaka till en sårbar version.
+- **Ett golv sätts även när lockfilen redan ligger över det.** `anyio` är transitivt (via `httpx`, som dras in av `openai`, `qdrant-client` och `google-genai`) och låg redan på 4.15.1, men har ändå golvet `>=4.14.2` i båda projekten. Utan det är lockfilen enda skyddet mot att en framtida omresolvering landar under fixgränsen för `GHSA-82r6-8w77-94w6` (TLS-certifikatspoofing när `TLSStream` IDNA 2003-kodar värdnamn). Samma resonemang som `idna>=3.15`: den felklassen finns både i namnbiblioteket och i TLS-lagret som anropar det.
 - **`qdrant-client` är låst till serverns version.** Klienten kräver samma major och minor-diff `<= 1` (`qdrant_client/common/version_check.py:is_compatible`), och varnar annars från en bakgrundstråd — vilket gör att `warnings.catch_warnings()` i ett testscript INTE fångar den. Servern kör **1.16.2**, så klienten måste ligga i 1.15–1.17; pinnad till `>=1.17,<1.18`. **Höj pinet först när Qdrant-servern uppgraderats.** Kontrollera med:
   ```bash
   curl -s -H "api-key: $QDRANT_API_KEY" "$QDRANT_URL/" | jq -r .version
@@ -336,7 +337,14 @@ curl -H "api-key: KEY" "https://qdrant.utvecklingfalkenberg.se/collections/koha-
 ```bash
 cd enrich && uv export --no-hashes --no-emit-project > /tmp/req.txt
 # POST:a paket+version till https://api.osv.dev/v1/querybatch och läs av 'vulns'
+
+# Alla rådgivningar för ETT paket, med fixgränser (utelämna "version"):
+curl -s -X POST https://api.osv.dev/v1/query \
+  -d '{"package":{"name":"anyio","ecosystem":"PyPI"}}' | jq -r \
+  '.vulns[] | "\(.id) \(.summary) fixad:\([.affected[].ranges[].events[].fixed // empty] | unique | join(","))"'
 ```
+
+Versionsqueryn (`"version":"4.15.1"`) svarar bara `{}` eller inte — den visar inte vilken fixgräns man ligger ovanför. Query utan `version` ger hela listan med fixgränser, vilket är det man behöver för att sätta ett constraint-golv.
 
 Efter varje `uv lock --upgrade`: kör granskningen igen, `uv sync`, och verifiera att scripten faktiskt startar — `uv run enrich_from_directus.py --dry-run --limit 1` och `uv run sync_to_qdrant.py --dry-run --limit=5 -v`. Dry-run-utskriften "Att radera: 68108" vid `--limit` är normal och ofarlig: delete hoppas över när `--limit` är satt (sync_to_qdrant.py rad ~583).
 

@@ -8,6 +8,7 @@ resolution-markers = [
 
 [manifest]
 constraints = [
+    { name = "anyio", specifier = ">=4.14.2" },
     { name = "cryptography", specifier = ">=50.0.0" },
     { name = "idna", specifier = ">=3.15" },
     { name = "pyasn1", specifier = ">=0.6.4" },
