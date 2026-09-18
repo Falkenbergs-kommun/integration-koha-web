@@ -36,7 +36,8 @@ function getOAuthToken($oauthUrl, $clientId, $clientSecret) {
     $ch = curl_init();
     curl_setopt($ch, CURLOPT_URL, $oauthUrl);
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
+    curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 2);
     curl_setopt($ch, CURLOPT_POST, true);
     curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query([
         'grant_type' => 'client_credentials',
@@ -75,7 +76,8 @@ function fetchMarcRecord($biblioUrl, $apiToken) {
     $ch = curl_init();
     curl_setopt($ch, CURLOPT_URL, $biblioUrl);
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
+    curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 2);
     curl_setopt($ch, CURLOPT_HTTPHEADER, [
         'Accept: application/marc-in-json',
         'Authorization: Bearer ' . $apiToken
@@ -278,7 +280,8 @@ function getBookDataFromApi($biblioId, $apiBaseUrl, $apiToken) {
     $ch = curl_init();
     curl_setopt($ch, CURLOPT_URL, $apiBaseUrl . $biblioId);
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
+    curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 2);
     curl_setopt($ch, CURLOPT_HTTPHEADER, [
         'Accept: application/json',
         'Authorization: Bearer ' . $apiToken
@@ -417,7 +420,8 @@ function cacheImage($isbn, $syndeticsUrl) {
     $ch = curl_init();
     curl_setopt($ch, CURLOPT_URL, $syndeticsUrl);
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
+    curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 2);
     curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
     curl_setopt($ch, CURLOPT_TIMEOUT, 15);
     curl_setopt($ch, CURLOPT_USERAGENT, 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36');
@@ -479,7 +483,8 @@ function fetchKohaLocalCover($biblioId, $kohaHost) {
     $ch = curl_init();
     curl_setopt($ch, CURLOPT_URL, $url);
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
+    curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 2);
     curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
     curl_setopt($ch, CURLOPT_TIMEOUT, 15);
     // Snabb fail vid nätverksblockering (droppade paket) — påverkar bara connect-fasen
@@ -541,7 +546,8 @@ function fetchRssFeed($rssUrl) {
     curl_setopt($ch, CURLOPT_URL, $rssUrl);
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
     curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
-    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
+    curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 2);
     curl_setopt($ch, CURLOPT_TIMEOUT, 30);
     // Snabb fail vid nätverksblockering (droppade paket) — påverkar bara connect-fasen
     curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 5);
@@ -684,7 +690,8 @@ function getItemTypesFromApi($apiBaseUrl, $apiToken) {
 
     curl_setopt($ch, CURLOPT_URL, $url);
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
+    curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 2);
     curl_setopt($ch, CURLOPT_HTTPHEADER, [
         'Accept: application/json',
         'Authorization: Bearer ' . $apiToken

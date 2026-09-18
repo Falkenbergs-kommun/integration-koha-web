@@ -25,7 +25,8 @@ $apiBase = rtrim(getenv('API_BASE_URL'), '/');
 $url = $apiBase . '?_order_by=-biblio_id&_per_page=1';
 $ch = curl_init($url);
 curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
+curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 2);
 curl_setopt($ch, CURLOPT_HTTPHEADER, [
     'Accept: application/json',
     'Authorization: Bearer ' . $token
@@ -44,7 +45,8 @@ echo "Highest biblio_id: " . number_format($highestId) . "\n";
 $url = $apiBase . '?_order_by=biblio_id&_per_page=1';
 $ch = curl_init($url);
 curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
+curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 2);
 curl_setopt($ch, CURLOPT_HTTPHEADER, [
     'Accept: application/json',
     'Authorization: Bearer ' . $token
@@ -77,7 +79,8 @@ foreach ($batchTests as $test) {
     $start = microtime(true);
     $ch = curl_init($url);
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
+    curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 2);
     curl_setopt($ch, CURLOPT_HTTPHEADER, [
         'Accept: application/json',
         'Authorization: Bearer ' . $token

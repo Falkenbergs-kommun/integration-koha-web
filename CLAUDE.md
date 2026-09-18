@@ -117,7 +117,7 @@ curl http://localhost/bibliotek/debug.php
 ## Important Implementation Notes
 
 ### Security Considerations
-- SSL verification is disabled (`CURLOPT_SSL_VERIFYPEER = false`) throughout - acceptable for internal library systems but should be reviewed for production
+- **TLS-verifiering är PÅ** (`CURLOPT_SSL_VERIFYPEER = true` + `CURLOPT_SSL_VERIFYHOST = 2`) i alla curl-anrop sedan 2026-09. Den var tidigare avstängd överallt, inklusive i `getOAuthToken()` som skickar `CLIENT_ID` och `CLIENT_SECRET` — där innebar det att en MITM kunde stjäla Koha-credentials. Samtliga uppströmsvärdar (Koha API, OAuth, OPAC/RSS, Syndetics, Directus) är verifierade att ha giltiga certifikat. **Stäng inte av det igen** för att "få något att fungera"; felsök certifikatkedjan i stället.
 - No input sanitization beyond numeric validation on list ID - risk is minimal given controlled data sources
 - OAuth credentials stored in .env file (properly gitignored)
 
