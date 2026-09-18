@@ -37,7 +37,7 @@ I Joomla admin:
 2. Lägg till i **Before `</head>` tag**:
 
 ```html
-<script src="https://dev-intra.falkenberg.se/integrationer/integration-koha-web/js/koha-shelf.js" defer></script>
+<script src="https://intranet.example.com/integrationer/integration-koha-web/js/koha-shelf.js" defer></script>
 ```
 
 ### Steg 3: Använd i Yootheme Pro

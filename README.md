@@ -203,7 +203,7 @@ För att enkelt visa bokhyllor på din webbplats finns en färdig JavaScript-wid
 
 **1. Inkludera JavaScript:**
 ```html
-<script src="https://dev-intra.falkenberg.se/integrationer/integration-koha-web/js/koha-shelf.js" defer></script>
+<script src="https://intranet.example.com/integrationer/integration-koha-web/js/koha-shelf.js" defer></script>
 ```
 
 **2. Lägg till HTML-element:**
