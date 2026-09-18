@@ -11,7 +11,7 @@ Collectionen `kft_koha_enriched` är nu skapad och populerad med 10 enriched bib
 ```bash
 curl -G 'https://nav.utvecklingfalkenberg.se/items/kft_koha_enriched' \
   --data-urlencode 'fields=biblio_id,title,target_audience' \
-  -H 'Authorization: Bearer D0duzBgxKihFrcv0gXjU3P0OF71eXWLL'
+  -H 'Authorization: Bearer YOUR_TOKEN'
 ```
 
 ### 2. Hämta en specifik biblio med full enriched data
@@ -20,7 +20,7 @@ curl -G 'https://nav.utvecklingfalkenberg.se/items/kft_koha_enriched' \
 curl -G 'https://nav.utvecklingfalkenberg.se/items/kft_koha_enriched' \
   --data-urlencode 'filter[biblio_id][_eq]=71069' \
   --data-urlencode 'fields=*' \
-  -H 'Authorization: Bearer D0duzBgxKihFrcv0gXjU3P0OF71eXWLL'
+  -H 'Authorization: Bearer YOUR_TOKEN'
 ```
 
 ### 3. Sök i enriched abstracts och metadata
@@ -29,7 +29,7 @@ curl -G 'https://nav.utvecklingfalkenberg.se/items/kft_koha_enriched' \
 curl -G 'https://nav.utvecklingfalkenberg.se/items/kft_koha_enriched' \
   --data-urlencode 'search=demokrati' \
   --data-urlencode 'fields=biblio_id,title,abstract_enriched' \
-  -H 'Authorization: Bearer D0duzBgxKihFrcv0gXjU3P0OF71eXWLL'
+  -H 'Authorization: Bearer YOUR_TOKEN'
 ```
 
 ### 4. Filtrera på målgrupp
@@ -38,7 +38,7 @@ curl -G 'https://nav.utvecklingfalkenberg.se/items/kft_koha_enriched' \
 # Hitta alla gymnasieböcker
 curl -G 'https://nav.utvecklingfalkenberg.se/items/kft_koha_enriched' \
   --data-urlencode 'filter[target_audience][_eq]=Gymnasiet' \
-  -H 'Authorization: Bearer D0duzBgxKihFrcv0gXjU3P0OF71eXWLL'
+  -H 'Authorization: Bearer YOUR_TOKEN'
 ```
 
 ### 5. Kombinera filter och sökning
@@ -48,7 +48,7 @@ curl -G 'https://nav.utvecklingfalkenberg.se/items/kft_koha_enriched' \
 curl -G 'https://nav.utvecklingfalkenberg.se/items/kft_koha_enriched' \
   --data-urlencode 'search=samhällskunskap' \
   --data-urlencode 'filter[target_audience][_eq]=Gymnasiet' \
-  -H 'Authorization: Bearer D0duzBgxKihFrcv0gXjU3P0OF71eXWLL'
+  -H 'Authorization: Bearer YOUR_TOKEN'
 ```
 
 ## 🔗 Join med kft_koha_biblios
