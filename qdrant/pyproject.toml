@@ -6,7 +6,11 @@ dependencies = [
     # Låst till 2.x: 3.x är en brytande major-release och ingen av
     # säkerhetsfixarna kräver den. Höj medvetet, inte som sidoeffekt.
     "openai>=2.29,<3",
-    "qdrant-client>=1.12",
+    # Måste hålla sig inom 1 minor från serverversionen (qdrant-klienten
+    # kräver samma major och minor-diff <= 1, se common/version_check.py).
+    # Servern kör 1.16.2 -> klienten får vara 1.15-1.17. Höj detta FÖRST
+    # när Qdrant-servern uppgraderats, annars går skrivvägen i ospecificerat läge.
+    "qdrant-client>=1.17,<1.18",
     "fastembed>=0.3",
     "python-dotenv>=1.2.2",
 ]

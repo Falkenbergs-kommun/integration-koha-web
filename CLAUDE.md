@@ -321,6 +321,12 @@ curl -H "api-key: KEY" "https://qdrant.utvecklingfalkenberg.se/collections/koha-
 
 - **Direkta beroenden** har minimigränser i `[project.dependencies]`.
 - **Transitiva beroenden** med kända sårbarheter pinnas via `[tool.uv] constraint-dependencies`. Constraints lägger inte till paket, de sätter bara golv om paketet ändå dras in — rätt verktyg för att hindra att t.ex. `pillow` (via `fastembed`) glider tillbaka till en sårbar version.
+- **`qdrant-client` är låst till serverns version.** Klienten kräver samma major och minor-diff `<= 1` (`qdrant_client/common/version_check.py:is_compatible`), och varnar annars från en bakgrundstråd — vilket gör att `warnings.catch_warnings()` i ett testscript INTE fångar den. Servern kör **1.16.2**, så klienten måste ligga i 1.15–1.17; pinnad till `>=1.17,<1.18`. **Höj pinet först när Qdrant-servern uppgraderats.** Kontrollera med:
+  ```bash
+  curl -s -H "api-key: $QDRANT_API_KEY" "$QDRANT_URL/" | jq -r .version
+  cd qdrant && uv run python -c "import importlib.metadata as m; from qdrant_client.common.version_check import is_compatible; print(is_compatible(m.version('qdrant-client'),'SERVERVERSION'))"
+  ```
+  En dry-run räcker INTE som kompatibilitetstest: läsvägen fungerar även vid versionsglapp, medan `upsert` med sparse-vektorer och `batch_update_points`/`OverwritePayloadOperation` är där API-drift slår.
 - **Major-versioner höjs medvetet, aldrig som sidoeffekt av en säkerhetsuppgradering.** `google-genai` är låst till `<2` och `openai` till `<3` av just det skälet; `uv lock --upgrade` ville annars dra in 2.x respektive 3.x utan att någon CVE krävde det. Höj dem i en egen commit med egen testning.
 
 ### Granska sårbarheter
