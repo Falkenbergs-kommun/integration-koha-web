@@ -264,7 +264,7 @@
                 <a href="${escapeHtml(catalogLink)}" target="_blank" rel="noopener" class="uk-link-reset" style="display: flex; height: 100%; text-decoration: none; color: inherit;">
                     <div class="uk-card uk-card-default uk-card-hover${cardSizeClass}" style="cursor: pointer; width: 100%; display: flex; flex-direction: column;">
                         <div class="uk-card-media-top" style="height: 400px; overflow: hidden; display: flex; align-items: center; justify-content: center; background: #f5f5f5; flex-shrink: 0;">
-                            <img src="${imageUrl}"
+                            <img src="${escapeHtml(imageUrl)}"
                                  alt="${escapeHtml(title)}"
                                  loading="lazy"
                                  style="width: 100%; height: 100%; object-fit: cover; object-position: center;">
@@ -274,7 +274,7 @@
                                 ${escapeHtml(title)}
                             </h3>
                             ${author ? `<p class="uk-text-meta uk-margin-remove-top">${escapeHtml(author)}</p>` : ''}
-                            ${showAbstract && abstract ? `<p class="uk-text-small uk-margin-small-top">${truncate(escapeHtml(abstract), 150)}</p>` : ''}
+                            ${showAbstract && abstract ? `<p class="uk-text-small uk-margin-small-top">${escapeHtml(truncate(abstract, 150))}</p>` : ''}
                         </div>
                     </div>
                 </a>
@@ -283,13 +283,23 @@
     }
 
     /**
-     * Escape HTML to prevent XSS
+     * Escape HTML to prevent XSS.
+     *
+     * OBS: den tidigare implementationen satte textContent och läste innerHTML.
+     * Den serialiseringen escapar & < > men INTE " eller ', eftersom citattecken
+     * inte behöver escapas i textnodkontext. Funktionen används dock inuti
+     * citerade attribut (alt="...", href="..."), där ett " i katalogdata bryter
+     * sig ur attributet och kan injicera en event-handler. Escapar därför
+     * explicit alla fem tecknen.
      */
     function escapeHtml(text) {
-        if (!text) return '';
-        const div = document.createElement('div');
-        div.textContent = text;
-        return div.innerHTML;
+        if (text === null || text === undefined) return '';
+        return String(text)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
     }
 
     /**
