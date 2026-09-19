@@ -162,20 +162,26 @@ function aggregateItemsByBiblio($items)
         $agg['total_items']++;
 
         // Tillgänglig = ej utlånad, ej skadad, ej borttappad, ej makulerad, ej referens
+        // OCH hemma: exemplaret befinner sig på sin hemfilial (holdingbranch =
+        // homebranch). Ett Falkenberg-exemplar som tillfälligt står i Slöinge
+        // (transport, återlämnat på annan filial) räknas inte som inne någonstans.
+        $homeBranch = $item['home_library_id'] ?? null;
+        $holdingBranch = $item['holding_library_id'] ?? $homeBranch;
         $isAvailable = empty($item['checked_out_date'])
             && ($item['not_for_loan_status'] ?? 0) == 0
             && ($item['damaged_status'] ?? 0) == 0
             && ($item['lost_status'] ?? 0) == 0
-            && ($item['withdrawn'] ?? 0) == 0;
+            && ($item['withdrawn'] ?? 0) == 0
+            && $holdingBranch === $homeBranch;
 
         if ($isAvailable) {
             $agg['available_items']++;
 
-            // Filial där exemplaret befinner sig just nu (holdingbranch) – driver
-            // "Finns inne på"-filtret i sökmodulen. Fallback till hemfilial.
-            $loc = $item['holding_library_id'] ?? $item['home_library_id'] ?? null;
-            if ($loc !== null) {
-                $agg['available_branches'][$loc] = true;
+            // Hemfilial för exemplar som är inne – driver "Finns inne på"-filtret
+            // i sökmodulen. Tack vare hemma-villkoret ovan är det samma sak som
+            // holdingbranch.
+            if ($homeBranch !== null) {
+                $agg['available_branches'][$homeBranch] = true;
             }
         }
 
