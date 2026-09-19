@@ -186,8 +186,8 @@ https://bibliotek.falkenberg.se/fbg_apps/services/koha/debug.php
 
 | Parameter | Värden | Standard | Beskrivning |
 |-----------|--------|----------|-------------|
-| `shelfnumber` | integer | 247 | Kohas shelf-ID (shelf.php) |
-| `biblionumber` | integer | - | Kohas biblio-ID (book.php) **Obligatorisk** |
+| `shelfnumber` | positivt heltal | 247 | Kohas shelf-ID (shelf.php). Annat värde ger HTTP 400 |
+| `biblionumber` | positivt heltal | - | Kohas biblio-ID (book.php) **Obligatorisk**. Annat värde ger HTTP 400 |
 | `format` | json, xml | json | Svarsformat (shelf.php, latest.php, book.php) |
 | `id` | integer | - | List-ID (endast list.php) |
 | `limit` | integer | 10 | Antal böcker, max 50 (endast latest.php) |
@@ -642,10 +642,15 @@ rm -rf images/*
 
 ### Konfiguration
 
-- **SSL-verifiering**: Avstängd (`CURLOPT_SSL_VERIFYPEER = false`) - acceptabelt för interna system
-- **.env-skydd**: Filen är gitignore:ad och bör ha `chmod 600`
-- **Input-validering**: shelfnumber valideras som integer
+- **TLS-verifiering**: På (`CURLOPT_SSL_VERIFYPEER = true`, `VERIFYHOST = 2`) i alla curl-anrop sedan 2026-09. Stäng inte av den – felsök certifikatkedjan i stället.
+- **.env-skydd**: Filen är gitignore:ad, ligger utanför webbroten och bör ha `chmod 600`
+- **Input-validering**: Alla query-parametrar valideras vid ingången. `shelfnumber`, `biblionumber` och `id` måste vara positiva heltal (`ctype_digit`), `format` whitelistas till `json`/`xml`, `limit` klämms till 1–50 och filtren i latest.php tillåter bara `[A-Z0-9_-]`. Arrayer (`?param[]=x`) avvisas i stället för att ge PHP-fel.
+- **X-Content-Type-Options: nosniff**: Sätts av alla endpoints. Svaren är JSON/XML och ska aldrig tolkas som HTML av webbläsaren.
 - **CORS**: Öppen för alla origins (`*`) - ändra om striktare säkerhet krävs
+
+### Statisk kodanalys (Semgrep)
+
+Semgrep flaggar `tainted-filename` och `echoed-request` i alla endpoints. Det är falska positiver: regelns sanerarlista känner bara `basename()`/`realpath()` respektive `htmlspecialchars()`, inte `intval()`, `ctype_digit()` eller whitelist via `in_array()`. Cache-filnamnen byggs enbart av validerade heltal och whitelistade strängar, och det som ekas är egengenererad JSON/XML med korrekt Content-Type. Kvittera fynden i stället för att "åtgärda" dem – `htmlentities()` på utdata skulle förstöra JSON-svaren.
 
 ### Secrets i .env
 

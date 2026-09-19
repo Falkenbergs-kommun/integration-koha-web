@@ -1216,7 +1216,14 @@ function markFailure($flagFile) {
 // kan få två olika indata att dela cache-nyckel.
 // Returnerar ['ok' => bool, 'values' => string[], 'error' => string|null]
 function parseFilterParam($raw, $paramName, $maxValues = 20, $maxLength = 32) {
-    if ($raw === null || trim($raw) === '') {
+    if ($raw === null || $raw === '') {
+        return ['ok' => true, 'values' => [], 'error' => null];
+    }
+    // ?param[]=x ger en array från PHP; trim() på den kastar TypeError (500).
+    if (!is_string($raw)) {
+        return ['ok' => false, 'values' => [], 'error' => "Ogiltigt värde för {$paramName}"];
+    }
+    if (trim($raw) === '') {
         return ['ok' => true, 'values' => [], 'error' => null];
     }
 

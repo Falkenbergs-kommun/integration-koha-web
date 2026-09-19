@@ -10,7 +10,7 @@ require_once __DIR__ . '/../common.php';
 loadEnv(__DIR__ . '/../.env');
 
 // Hämta och validera format först — felsvar måste kunna skickas i rätt format
-$format = isset($_GET['format']) ? strtolower($_GET['format']) : 'json';
+$format = isset($_GET['format']) && is_string($_GET['format']) ? strtolower($_GET['format']) : 'json';
 if (!in_array($format, ['json', 'xml'])) {
     $format = 'json';
 }
@@ -23,6 +23,9 @@ if ($format === 'xml') {
 }
 header('Access-Control-Allow-Origin: *');
 header('Cache-Control: no-cache, must-revalidate');
+// Svaren är JSON/XML, aldrig HTML. nosniff hindrar webbläsaren från att gissa
+// annat, vilket gör XSS via ekad cache-utdata omöjligt även i teorin.
+header('X-Content-Type-Options: nosniff');
 
 // Golv OCH tak på limit. Utan golv går negativa värden vidare till Directus,
 // där limit=-1 betyder "obegränsat" — en enda request skulle då dra hem hela

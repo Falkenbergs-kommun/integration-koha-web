@@ -5,32 +5,8 @@ require_once __DIR__ . '/../common.php';
 // Ladda .env-fil
 loadEnv(__DIR__ . '/../.env');
 
-// Hämta parametrar från GET
-$biblioId = isset($_GET['biblionumber']) ? intval($_GET['biblionumber']) : null;
-$format = isset($_GET['format']) ? strtolower($_GET['format']) : 'json';
-
-// Validera biblio ID
-if (!$biblioId || $biblioId <= 0) {
-    http_response_code(400);
-    $errorResponse = [
-        'status' => 'error',
-        'message' => 'Saknar eller ogiltigt biblionumber. Använd ?biblionumber=12345'
-    ];
-
-    if ($format === 'xml') {
-        header('Content-Type: application/xml; charset=utf-8');
-        $xml = new SimpleXMLElement('<?xml version="1.0" encoding="UTF-8"?><response></response>');
-        $xml->addChild('status', 'error');
-        $xml->addChild('message', htmlspecialchars($errorResponse['message']));
-        echo $xml->asXML();
-    } else {
-        header('Content-Type: application/json; charset=utf-8');
-        echo json_encode($errorResponse, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
-    }
-    exit;
-}
-
-// Validera format
+// Hämta och validera format först — felsvar måste kunna skickas i rätt format
+$format = isset($_GET['format']) && is_string($_GET['format']) ? strtolower($_GET['format']) : 'json';
 if (!in_array($format, ['json', 'xml'])) {
     $format = 'json';
 }
@@ -43,6 +19,20 @@ if ($format === 'xml') {
 }
 header('Access-Control-Allow-Origin: *');
 header('Cache-Control: no-cache, must-revalidate');
+// Svaren är JSON/XML, aldrig HTML. nosniff hindrar webbläsaren från att gissa
+// annat, vilket gör XSS via ekad cache-utdata omöjligt även i teorin.
+header('X-Content-Type-Options: nosniff');
+
+// Biblionummer: bara positiva heltal (samma regel som ?id i list.php).
+// intval() släppte tidigare igenom "12abc" och arrayer (intval([x]) === 1).
+$rawBiblioId = isset($_GET['biblionumber']) && is_string($_GET['biblionumber']) ? trim($_GET['biblionumber']) : '';
+if (!ctype_digit($rawBiblioId) || intval($rawBiblioId) <= 0) {
+    sendErrorResponse(400, $format, [
+        'status' => 'error',
+        'message' => 'Saknar eller ogiltigt biblionumber. Använd ?biblionumber=12345'
+    ]);
+}
+$biblioId = intval($rawBiblioId);
 
 // Säkerställ att cache-katalogen finns
 $cacheDir = __DIR__ . '/../cache';

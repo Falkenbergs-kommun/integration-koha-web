@@ -8,11 +8,8 @@ require_once __DIR__ . '/../common.php';
 // Ladda .env-fil
 loadEnv(__DIR__ . '/../.env');
 
-// Hämta parametrar från GET
-$shelfNumber = isset($_GET['shelfnumber']) ? intval($_GET['shelfnumber']) : 247;
-$format = isset($_GET['format']) ? strtolower($_GET['format']) : 'json';
-
-// Validera format
+// Hämta och validera format först — felsvar måste kunna skickas i rätt format
+$format = isset($_GET['format']) && is_string($_GET['format']) ? strtolower($_GET['format']) : 'json';
 if (!in_array($format, ['json', 'xml'])) {
     $format = 'json';
 }
@@ -25,6 +22,24 @@ if ($format === 'xml') {
 }
 header('Access-Control-Allow-Origin: *');
 header('Cache-Control: no-cache, must-revalidate');
+// Svaren är JSON/XML, aldrig HTML. nosniff hindrar webbläsaren från att gissa
+// annat, vilket gör XSS via ekad cache-utdata omöjligt även i teorin.
+header('X-Content-Type-Options: nosniff');
+
+// Hyllnummer: bara positiva heltal (samma regel som ?id i list.php). Utelämnat
+// ger standardhyllan 247. intval() släppte tidigare igenom negativa tal och
+// arrayer, som blev egna cache-filer och Koha-anrop för hyllor som inte finns.
+$rawShelf = '247';
+if (isset($_GET['shelfnumber'])) {
+    $rawShelf = is_string($_GET['shelfnumber']) ? trim($_GET['shelfnumber']) : '';
+}
+if (!ctype_digit($rawShelf) || intval($rawShelf) <= 0) {
+    sendErrorResponse(400, $format, [
+        'status' => 'error',
+        'message' => 'Ogiltigt shelfnumber. Måste vara ett positivt heltal.'
+    ]);
+}
+$shelfNumber = intval($rawShelf);
 
 // Säkerställ att cache-katalogen finns
 $cacheDir = __DIR__ . '/../cache';

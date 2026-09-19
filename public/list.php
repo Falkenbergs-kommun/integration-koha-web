@@ -13,9 +13,12 @@ loadEnv(__DIR__ . '/../.env');
 header('Content-Type: application/json; charset=utf-8');
 header('Access-Control-Allow-Origin: *');
 header('Cache-Control: no-cache, must-revalidate');
+// Svaren är JSON/XML, aldrig HTML. nosniff hindrar webbläsaren från att gissa
+// annat, vilket gör XSS via ekad cache-utdata omöjligt även i teorin.
+header('X-Content-Type-Options: nosniff');
 
 // Hämta lista-ID från GET-parameter
-$rawListId = isset($_GET['id']) ? trim($_GET['id']) : '';
+$rawListId = isset($_GET['id']) && is_string($_GET['id']) ? trim($_GET['id']) : '';
 
 if ($rawListId === '') {
     sendErrorResponse(400, 'json', [

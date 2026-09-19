@@ -9,6 +9,9 @@ loadEnv(__DIR__ . '/../.env');
 header('Content-Type: application/json; charset=utf-8');
 header('Access-Control-Allow-Origin: *');
 header('Cache-Control: no-cache, must-revalidate');
+// Svaren är JSON/XML, aldrig HTML. nosniff hindrar webbläsaren från att gissa
+// annat, vilket gör XSS via ekad cache-utdata omöjligt även i teorin.
+header('X-Content-Type-Options: nosniff');
 
 // Hämta konfiguration från .env
 $apiBaseUrl = getenv('API_BASE_URL');
