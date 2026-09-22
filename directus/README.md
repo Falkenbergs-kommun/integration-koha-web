@@ -184,7 +184,7 @@ Baserat på analys av Koha-katalogen (2026-01-23):
 # Redigera crontab
 crontab -e
 
-# Daglig testsynk (100 nyaste böcker) kl 03:00
+# Daglig testsynk (100 nyaste böcker) kl 07:30
 0 3 * * * cd /home/httpd/fbg-intranet/integrationer/integration-koha-web/directus && php sync_koha_to_directus.php >> sync.log 2>&1
 
 # Månatlig full sync (hela katalogen) första söndagen kl 02:00

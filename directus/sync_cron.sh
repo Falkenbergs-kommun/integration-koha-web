@@ -6,14 +6,14 @@
 # 1. Branches (libraries) - fast, reference data
 # 2. Biblios (books) - medium, ~70k records
 # 3. Items (exemplar) - large, ~155k records
-# 4. Holds (reservations) - fast, ~1900 holds aggregated to ~1140 biblios
+# 4. Holds (reservations) - fast, ~2300 holds aggregated to ~1200 biblios + hold_status per item
 # 5. Enrich metadata - Gemini AI enrichment (up to 1000 books/run)
 # 6. Qdrant vectors - hybrid search embeddings (dense + sparse)
 #
 # Sends start/success/fail pings to healthchecks.io with per-step payload.
 #
-# Crontab entry (daily at 03:00):
-# 0 3 * * * /home/httpd/fbg-intranet/integrationer/integration-koha-web/directus/sync_cron.sh
+# Crontab entry (daily at 07:30):
+# 30 7 * * * /home/httpd/fbg-intranet/integrationer/integration-koha-web/directus/sync_cron.sh
 #
 # @package    Falkenbergs kommun
 # @subpackage Koha Sync
@@ -100,7 +100,7 @@ run_sync() {
 
     # Extract key stats for healthcheck payload
     local stats_summary
-    stats_summary=$(echo "$step_output" | grep -E '^\s*(Created|Updated|Skipped|Errors|Duration|Marked inactive|Duplicates deleted|Koha (biblios|libraries|items|holds)|Directus before|Total in Directus|Hold counts created|Hold counts updated|Biblios updated|Unique biblios|Peak memory):' | sed 's/^[[:space:]]*//' | head -12)
+    stats_summary=$(echo "$step_output" | grep -E '^\s*(Created|Updated|Skipped|Errors|Duration|Marked inactive|Duplicates deleted|Koha (biblios|libraries|items|holds)|Directus before|Total in Directus|Hold counts created|Hold counts updated|Biblios updated|Item hold_status set|Unique biblios|Peak memory):' | sed 's/^[[:space:]]*//' | head -12)
 
     if [ $exit_code -eq 0 ]; then
         echo "[$step_timestamp] ${name}: SUCCESS" >> "$LOG_FILE"

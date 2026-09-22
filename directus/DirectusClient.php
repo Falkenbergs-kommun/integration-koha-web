@@ -194,6 +194,42 @@ class DirectusClient
     }
 
     /**
+     * Finns fältet i collectionen? Läser fältlistan (GET /fields/{collection}),
+     * som fungerar även med tokens utan rätt att administrera fält.
+     *
+     * @param string $collection
+     * @param string $field
+     * @return bool
+     */
+    public function fieldExists($collection, $field)
+    {
+        $url = "{$this->baseUrl}/fields/{$collection}";
+
+        $ch = curl_init($url);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_HTTPHEADER, [
+            'Authorization: Bearer ' . $this->token
+        ]);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 30);
+
+        $response = curl_exec($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        if ($httpCode !== 200) {
+            return false;
+        }
+
+        $data = json_decode($response, true);
+        foreach ($data['data'] ?? [] as $f) {
+            if (($f['field'] ?? null) === $field) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
      * Check if a collection exists
      *
      * @param string $collection Collection name
@@ -539,6 +575,56 @@ class DirectusClient
         }
 
         return $created;
+    }
+
+    /**
+     * Homogen bulk-PATCH: samma data till många rader i ett anrop per batch.
+     * Directus: PATCH /items/{collection} med body {keys: [...], data: {...}}.
+     * Till skillnad från updateItems() (en PATCH per rad) blir ~500 rader ~5 anrop.
+     *
+     * @param string $collection Collection name
+     * @param array $ids Directus primary keys
+     * @param array $data Fält att sätta på alla rader
+     * @param int $batchSize Rader per anrop
+     * @return int Antal rader som skickats
+     * @throws Exception om ett anrop misslyckas
+     */
+    public function updateItemsBulk($collection, array $ids, array $data, $batchSize = 100)
+    {
+        $url = "{$this->baseUrl}/items/{$collection}";
+        $sent = 0;
+
+        foreach (array_chunk(array_values($ids), $batchSize) as $batchIndex => $batch) {
+            if ($this->verbose) {
+                $this->log("   PATCH bulk: {$url} (" . count($batch) . " ids, batch " . ($batchIndex + 1) . ") data=" . json_encode($data));
+            }
+
+            $ch = curl_init($url);
+            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($ch, CURLOPT_CUSTOMREQUEST, 'PATCH');
+            curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode(['keys' => $batch, 'data' => $data]));
+            curl_setopt($ch, CURLOPT_HTTPHEADER, [
+                'Content-Type: application/json',
+                'Authorization: Bearer ' . $this->token
+            ]);
+            curl_setopt($ch, CURLOPT_TIMEOUT, 120);
+
+            $response = curl_exec($ch);
+            $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            $error = curl_error($ch);
+            curl_close($ch);
+
+            if ($error) {
+                throw new Exception("Directus bulk PATCH failed: {$error}");
+            }
+            if ($httpCode !== 200 && $httpCode !== 204) {
+                throw new Exception("Directus bulk PATCH failed (HTTP {$httpCode}): " . substr((string)$response, 0, 300));
+            }
+
+            $sent += count($batch);
+        }
+
+        return $sent;
     }
 
     /**

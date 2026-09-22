@@ -165,6 +165,9 @@ function aggregateItemsByBiblio($items)
         // OCH hemma: exemplaret befinner sig på sin hemfilial (holdingbranch =
         // homebranch). Ett Falkenberg-exemplar som tillfälligt står i Slöinge
         // (transport, återlämnat på annan filial) räknas inte som inne någonstans.
+        // OCH inte reserverad: hold_status (W = på reservationshyllan, T = i transit)
+        // sätts av sync_koha_holds.php – exemplarfälten säger inget om det, så
+        // ett exemplar som väntar på sin låntagare ser annars ledigt ut.
         $homeBranch = $item['home_library_id'] ?? null;
         $holdingBranch = $item['holding_library_id'] ?? $homeBranch;
         $isAvailable = empty($item['checked_out_date'])
@@ -172,6 +175,7 @@ function aggregateItemsByBiblio($items)
             && ($item['damaged_status'] ?? 0) == 0
             && ($item['lost_status'] ?? 0) == 0
             && ($item['withdrawn'] ?? 0) == 0
+            && empty($item['hold_status'])
             && $holdingBranch === $homeBranch;
 
         if ($isAvailable) {
@@ -651,6 +655,13 @@ function main()
     $itemFields = 'biblio_id,item_type_id,effective_item_type_id,collection_code,'
         . 'callnumber,home_library_id,holding_library_id,location,permanent_location,'
         . 'checked_out_date,not_for_loan_status,damaged_status,lost_status,withdrawn,status';
+    // hold_status (reservationshyllan/transit, sätts av sync_koha_holds.php) – ett okänt
+    // fält i fields-listan ger 403 från Directus, så ta bara med det när det finns.
+    if ($client->fieldExists('kft_koha_items', 'hold_status')) {
+        $itemFields .= ',hold_status';
+    } else {
+        echo "  VARNING: kft_koha_items.hold_status saknas – reserverade exemplar räknas som tillgängliga\n";
+    }
 
     $items = fetchAllFromCollection($client, 'kft_koha_items', $itemFields, ['status' => ['_eq' => 'active']], $verbose);
     $itemAggMap = aggregateItemsByBiblio($items);

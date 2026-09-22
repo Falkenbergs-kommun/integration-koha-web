@@ -355,6 +355,136 @@ function fetchAllDirectusBiblios($client, $verbose = false)
 /**
  * Main synchronization logic
  */
+/**
+ * Sätt hold_status (W/T/null) per exemplar i kft_koha_items.
+ *
+ * Exemplarfälten i Koha (checked_out_date m.fl.) säger inget om att ett exemplar
+ * väntar på reservationshyllan – det ligger i reserves (found = W) resp. i transit
+ * (found = T). Utan detta räknar prepare_embedding_text.php och sökmodulens modal
+ * sådana exemplar som "inne". Här diffas Kohas aktuella W/T-holds mot raderna som
+ * redan är flaggade i Directus och bara skillnaden skrivs (homogena bulk-PATCH:ar).
+ *
+ * Använder samma $holds som redan hämtats – inget extra Koha-anrop.
+ *
+ * @param DirectusClient $client
+ * @param array $holds Råa holds från Koha API
+ * @param bool $verbose
+ * @return array ['set' => int, 'cleared' => int, 'missing_items' => int]
+ */
+function syncItemHoldStatus($client, $holds, $verbose = false)
+{
+    // item_id => 'W'|'T'. Ett exemplar kan bara ha en found-reservation åt gången,
+    // men skulle flera dyka upp vinner W (står på hyllan) över T.
+    $wanted = [];
+    foreach ($holds as $hold) {
+        $status = $hold['status'] ?? null;
+        $itemId = $hold['item_id'] ?? null;
+        if ($itemId === null || ($status !== 'W' && $status !== 'T')) {
+            continue;
+        }
+        $itemId = (int)$itemId;
+        if (!isset($wanted[$itemId]) || $status === 'W') {
+            $wanted[$itemId] = $status;
+        }
+    }
+
+    // Nuvarande flaggade rader i Directus: item_id => [directus id, hold_status]
+    $current = [];
+    foreach (directusItemsQuery($client, [
+        'fields' => 'id,item_id,hold_status',
+        'filter' => json_encode(['hold_status' => ['_nnull' => true]]),
+        'limit' => -1,
+    ]) as $row) {
+        $current[(int)$row['item_id']] = [$row['id'], $row['hold_status']];
+    }
+
+    // Directus-id för de exemplar som ska flaggas men inte redan är det med rätt värde
+    $needLookup = [];
+    foreach ($wanted as $itemId => $status) {
+        if (!isset($current[$itemId]) || $current[$itemId][1] !== $status) {
+            $needLookup[] = $itemId;
+        }
+    }
+    $directusIdByItem = [];
+    foreach (array_chunk($needLookup, 100) as $chunk) {
+        foreach (directusItemsQuery($client, [
+            'fields' => 'id,item_id',
+            'filter' => json_encode(['item_id' => ['_in' => $chunk]]),
+            'limit' => -1,
+        ]) as $row) {
+            $directusIdByItem[(int)$row['item_id']] = $row['id'];
+        }
+    }
+
+    $setIds = ['W' => [], 'T' => []];
+    $missing = 0;
+    foreach ($needLookup as $itemId) {
+        if (isset($directusIdByItem[$itemId])) {
+            $setIds[$wanted[$itemId]][] = $directusIdByItem[$itemId];
+        } else {
+            // Exemplaret finns inte i Directus (ännu) – items-synken har inte sett det
+            $missing++;
+        }
+    }
+
+    $clearIds = [];
+    foreach ($current as $itemId => [$directusId, $status]) {
+        if (!isset($wanted[$itemId])) {
+            $clearIds[] = $directusId;
+        }
+    }
+
+    $set = 0;
+    foreach ($setIds as $status => $ids) {
+        if ($ids !== []) {
+            $set += $client->updateItemsBulk('kft_koha_items', $ids, ['hold_status' => $status]);
+        }
+    }
+    $cleared = 0;
+    if ($clearIds !== []) {
+        $cleared = $client->updateItemsBulk('kft_koha_items', $clearIds, ['hold_status' => null]);
+    }
+
+    if ($verbose) {
+        echo "  W/T-holds i Koha: " . count($wanted) . ", redan flaggade i Directus: " . count($current) . "\n";
+        echo "  Satta: {$set} (W: " . count($setIds['W']) . ", T: " . count($setIds['T']) . "), nollade: {$cleared}, saknas i Directus: {$missing}\n";
+    }
+
+    return ['set' => $set, 'cleared' => $cleared, 'missing_items' => $missing];
+}
+
+/**
+ * GET /items/kft_koha_items med godtyckliga query-parametrar. Returnerar data-arrayen.
+ *
+ * @param DirectusClient $client
+ * @param array $params Query-parametrar (fields, filter (JSON-sträng), limit, ...)
+ * @return array
+ */
+function directusItemsQuery($client, array $params)
+{
+    $url = rtrim($client->getBaseUrl(), '/') . '/items/kft_koha_items?' . http_build_query($params);
+
+    $ch = curl_init($url);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_HTTPHEADER, [
+        'Authorization: Bearer ' . $client->getToken(),
+        'Content-Type: application/json'
+    ]);
+    curl_setopt($ch, CURLOPT_TIMEOUT, 60);
+
+    $response = curl_exec($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $error = curl_error($ch);
+    curl_close($ch);
+
+    if ($httpCode !== 200) {
+        throw new Exception("Directus items query failed (HTTP {$httpCode}): " . ($error ?: substr((string)$response, 0, 200)));
+    }
+
+    $data = json_decode($response, true);
+    return $data['data'] ?? [];
+}
+
 function main()
 {
     global $argv;
@@ -379,6 +509,9 @@ function main()
         'updated' => 0,
         'marked_inactive' => 0,
         'biblios_updated' => 0,
+        'hold_status_set' => 0,
+        'hold_status_cleared' => 0,
+        'hold_status_missing' => 0,
         'errors' => []
     ];
 
@@ -408,7 +541,7 @@ function main()
         echo "Configuration loaded\n\n";
 
         // Step 1: Get OAuth token from Koha
-        echo "Step 1/6: Getting OAuth token from Koha...\n";
+        echo "Step 1/7: Getting OAuth token from Koha...\n";
         $kohaToken = getOAuthToken(
             $config['OAUTH_URL'],
             $config['CLIENT_ID'],
@@ -422,13 +555,13 @@ function main()
         echo "OAuth token obtained\n\n";
 
         // Step 2: Fetch all holds from Koha API
-        echo "Step 2/6: Fetching holds from Koha API...\n";
+        echo "Step 2/7: Fetching holds from Koha API...\n";
         $kohaHolds = fetchAllKohaHolds($config['API_BASE_URL'], $kohaToken);
         $stats['koha_holds_total'] = count($kohaHolds);
         echo "Fetched {$stats['koha_holds_total']} holds from Koha\n\n";
 
         // Step 3: Aggregate per biblio
-        echo "Step 3/6: Aggregating holds per biblio...\n";
+        echo "Step 3/7: Aggregating holds per biblio...\n";
         $aggregated = aggregateHoldsByBiblio($kohaHolds);
         $stats['unique_biblios'] = count($aggregated);
         echo "Aggregated to {$stats['unique_biblios']} unique biblios\n";
@@ -448,7 +581,7 @@ function main()
         echo "\n";
 
         // Step 4: Fetch item counts from Directus
-        echo "Step 4/6: Fetching item counts from Directus...\n";
+        echo "Step 4/7: Fetching item counts from Directus...\n";
         $directusClient = new DirectusClient(
             $config['DIRECTUS_API_URL'],
             $config['DIRECTUS_API_TOKEN'],
@@ -468,7 +601,7 @@ function main()
         echo "Counted items for " . count($itemCounts) . " biblios\n\n";
 
         // Step 5: Sync to kft_koha_hold_counts
-        echo "Step 5/6: Syncing hold counts to Directus...\n";
+        echo "Step 5/7: Syncing hold counts to Directus...\n";
 
         $existingRecords = fetchAllDirectusHoldCounts($directusClient, $verbose);
         $stats['directus_before'] = count($existingRecords);
@@ -546,7 +679,7 @@ function main()
         echo "Hold counts sync complete\n\n";
 
         // Step 6: Update hold_count and item_count on kft_koha_biblios
-        echo "Step 6/6: Updating hold_count & item_count on kft_koha_biblios...\n";
+        echo "Step 6/7: Updating hold_count & item_count on kft_koha_biblios...\n";
 
         $allBiblios = fetchAllDirectusBiblios($directusClient, $verbose);
         echo "Fetched " . count($allBiblios) . " biblios from Directus\n";
@@ -586,6 +719,23 @@ function main()
 
         echo "Updated {$stats['biblios_updated']} biblios with hold/item counts\n\n";
 
+        // Step 7: hold_status per exemplar (reservationshyllan/transit) i kft_koha_items.
+        // Egen try/catch – ett fel här ska inte underkänna hold_counts-synken ovan.
+        echo "Step 7/7: Updating hold_status on kft_koha_items...\n";
+        try {
+            if (!$directusClient->fieldExists('kft_koha_items', 'hold_status')) {
+                throw new Exception("fältet kft_koha_items.hold_status saknas – skapa det (php add_hold_status_to_items.php med admin-token, eller i Directus-admin: String, längd 1, nullable)");
+            }
+            $holdStatus = syncItemHoldStatus($directusClient, $kohaHolds, $verbose);
+            $stats['hold_status_set'] = $holdStatus['set'];
+            $stats['hold_status_cleared'] = $holdStatus['cleared'];
+            $stats['hold_status_missing'] = $holdStatus['missing_items'];
+            echo "hold_status: {$holdStatus['set']} satta, {$holdStatus['cleared']} nollade\n\n";
+        } catch (Exception $e) {
+            $stats['errors'][] = "hold_status sync failed: " . $e->getMessage();
+            echo "  ERROR: hold_status sync failed: " . $e->getMessage() . "\n\n";
+        }
+
     } catch (Exception $e) {
         echo "\nFatal error: " . $e->getMessage() . "\n";
         exit(1);
@@ -606,6 +756,8 @@ function main()
     echo "Hold counts updated:     {$stats['updated']}\n";
     echo "Marked inactive:         {$stats['marked_inactive']}\n";
     echo "Biblios updated:         {$stats['biblios_updated']}\n";
+    echo "Item hold_status set:    {$stats['hold_status_set']}\n";
+    echo "Item hold_status cleared:{$stats['hold_status_cleared']}\n";
     echo "Errors:                  " . count($stats['errors']) . "\n";
     echo "--------------------------------------------------------\n";
     echo "Duration:                " . number_format($duration, 2) . "s\n";
