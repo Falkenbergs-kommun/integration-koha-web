@@ -224,10 +224,32 @@ uv run enrich_from_directus.py --model gemini-3.6-flash  # Annan modell (default
 ```
 
 **Cost tracking:**
-- Typical cost: ~$0.00015 per book (0.015 öre)
-- Costs calculated from actual token usage
+- Typical cost: ~$0.003 per book med `gemini-3.8-flash` (mätt 2026-09-28; priset
+  dubblas 2027-01-01). Tidigare siffra ($0.00015) byggde på gissade priser.
+- Costs calculated from actual token usage, **inklusive thinking-tokens**
+- Google Search-anropens egen kostnad ingår inte
 - Saved to database for transparency
 - See `enrich/COST_TRACKING.md` for details
+
+### Modellval och grundning (`enrich/modell.py`)
+
+- **En enda källa** för `DEFAULT_MODEL`, sökinstruktion och `PRISER` — alla
+  fyra berikningsskript importerar den. Lägg aldrig en egen prislista i ett
+  skript: fyra kopior bar kvar stängda gemini-1.5/2.0 och "antagna" priser
+  som underskattade kostnaden ~35 gånger. Okänd modell ger varning och 0,
+  inte ett gissat pris — lägg till modellen i `PRISER` när du byter.
+- **De stabila Gemini-modellerna söker inte alltid.** Till skillnad från den
+  tidigare preview-modellen avgör de själva om Google Search används, och
+  Gemini API kan inte tvinga fram det. Därför: `SOK_INSTRUKTION`, ett nytt
+  försök om svaret saknar källor, och sedan sparas det men räknas som
+  **ogrundat**. Raden `Ogrundade (sparade utan webbkällor): N av M` skrivs
+  alltid (även 0) och når Healthchecks. Är andelen ofta hög: prova
+  `gemini-3.6-flash`, som sökte oftare i test.
+- `sync_cron.sh` filtrerar bort raderna per bok före `head -10` — annars
+  trängs sammanfattningen ut ur Healthchecks-kroppen vid stora körningar.
+- Modellens livscykel bevakas i Dependabot-översikten (fliken AI & API:er).
+  Byt modell innan den blir utfasad, och verifiera grundningen på några
+  riktiga böcker innan bytet — det var så skillnaden ovan upptäcktes.
 
 ### Setup & Troubleshooting
 
