@@ -27,13 +27,9 @@ För varje bok i bibliotekskatalogen genereras:
 
 ## API-modeller
 
-Google Gemini erbjuder flera modeller:
-
-- **gemini-2.0-flash-exp**: Snabbaste, gratis tier, bra för bulk-enrichment
-- **gemini-1.5-pro**: Mer avancerad, större kontext, högre kostnad
-- **gemini-1.5-flash**: Balans mellan hastighet och kvalitet
-
-För detta projekt rekommenderas **gemini-2.0-flash-exp** för utveckling och **gemini-1.5-flash** för produktion.
+Modellvalet görs på ett ställe: `enrich/modell.py` (`DEFAULT_MODEL`, i dag
+`gemini-3.8-flash`). Se `enrich/README.md` för varför och hur ogrundade svar
+hanteras. Modellerna som tidigare nämndes här är stängda av Google.
 
 ## Rate Limits (Free Tier)
 
@@ -77,7 +73,7 @@ require_once __DIR__ . '/common.php';
 loadEnv(__DIR__ . '/.env');
 
 $apiKey = getenv('GEMINI_API_KEY');
-$model = 'gemini-2.0-flash-exp';
+$model = 'gemini-3.8-flash';
 $endpoint = "https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent?key=$apiKey";
 
 $prompt = "Skriv en pedagogisk sammanfattning av boken: Nationalencyklopedins samhällskunskap";

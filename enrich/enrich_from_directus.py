@@ -31,6 +31,8 @@ from google import genai
 from google.genai.types import GenerateContentConfig, GoogleSearch, Tool
 from pydantic import BaseModel, Field
 
+from modell import DEFAULT_MODEL, SOK_INSTRUKTION, ar_grundad, kostnad
+
 
 # ── Structured output schema ──────────────────────────────────────────────
 
@@ -148,44 +150,15 @@ def extract_grounding(response) -> dict:
     return grounding
 
 
-def calculate_cost(response, model: str) -> float:
-    """Calculate cost in USD based on token usage and model pricing.
-
-    Pricing (as of 2024):
-    - gemini-1.5-flash: $0.075/1M input, $0.30/1M output
-    - gemini-1.5-pro: $1.25/1M input, $5.00/1M output
-    - gemini-3-flash-preview: Free tier (assumed same pricing as 1.5-flash for calculation)
-    """
-    if not hasattr(response, 'usage_metadata') or not response.usage_metadata:
-        return 0.0
-
-    usage = response.usage_metadata
-    prompt_tokens = getattr(usage, 'prompt_token_count', 0)
-    output_tokens = getattr(usage, 'candidates_token_count', 0)
-
-    # Pricing per 1M tokens
-    pricing = {
-        'gemini-1.5-flash': {'input': 0.075, 'output': 0.30},
-        'gemini-1.5-pro': {'input': 1.25, 'output': 5.00},
-        'gemini-3-flash-preview': {'input': 0.075, 'output': 0.30},  # Assumed
-    }
-
-    # Default to flash pricing if model not found
-    model_pricing = pricing.get(model, pricing['gemini-1.5-flash'])
-
-    # Calculate cost
-    input_cost = (prompt_tokens / 1_000_000) * model_pricing['input']
-    output_cost = (output_tokens / 1_000_000) * model_pricing['output']
-    total_cost = input_cost + output_cost
-
-    return total_cost
-
-
 def enrich_book(
     client: genai.Client, model: str, book: dict
-) -> tuple[Optional[BookEnrichment], dict, float]:
+) -> tuple[Optional[BookEnrichment], dict, float, bool]:
     """Call Gemini with Google Search grounding to enrich a single book.
-    Returns (enrichment, grounding_metadata, cost_usd)."""
+
+    De stabila modellerna hoppar ofta över sökningen och svarar ur minnet.
+    Ett svar utan källor provas därför en gång till; blir även det ogrundat
+    används det ändå — anroparen räknar det som ogrundat så att andelen syns.
+    Returns (enrichment, grounding_metadata, cost_usd, is_quota_err)."""
     title = book.get("title", "")
     author = book.get("author", "")
     isbn = book.get("isbn_clean") or book.get("isbn", "")
@@ -200,19 +173,23 @@ def enrich_book(
         f"bokens ämnen, teman och praktiska områden."
     )
 
+    config = GenerateContentConfig(
+        system_instruction=SOK_INSTRUKTION,
+        tools=[Tool(google_search=GoogleSearch())],
+        response_mime_type="application/json",
+        response_json_schema=BookEnrichment.model_json_schema(),
+    )
     try:
-        response = client.models.generate_content(
-            model=model,
-            contents=prompt,
-            config=GenerateContentConfig(
-                tools=[Tool(google_search=GoogleSearch())],
-                response_mime_type="application/json",
-                response_json_schema=BookEnrichment.model_json_schema(),
-            ),
-        )
-        enrichment = BookEnrichment.model_validate_json(response.text)
-        grounding = extract_grounding(response)
-        cost = calculate_cost(response, model)
+        cost = 0.0
+        for _forsok in range(2):
+            response = client.models.generate_content(
+                model=model, contents=prompt, config=config,
+            )
+            cost += kostnad(response, model)
+            enrichment = BookEnrichment.model_validate_json(response.text)
+            grounding = extract_grounding(response)
+            if ar_grundad(grounding):
+                break
         return enrichment, grounding, cost, False
     except Exception as exc:
         print(f"  ⚠  Error enriching '{title}': {exc}", file=sys.stderr)
@@ -273,6 +250,7 @@ def run_enrichment_pipeline(
     success_count = 0
     error_count = 0
     quota_error_count = 0
+    ungrounded_count = 0
     total_cost = 0.0
 
     for i, book in enumerate(to_enrich, 1):
@@ -300,6 +278,9 @@ def run_enrichment_pipeline(
         print(f"        Tags: {', '.join(enrichment.tags[:5])}...")
         print(f"        Audience: {enrichment.target_audience}")
         print(f"        Cost: ${cost_usd:.6f} USD")
+        grundad = ar_grundad(grounding)
+        if not grundad:
+            print(f"      ⚠  Ogrundad: inga webbkällor efter två försök — svaret bygger på modellens minne")
 
         # Step 4: Save to Directus
         if not dry_run:
@@ -319,6 +300,7 @@ def run_enrichment_pipeline(
             if directus.save_enriched_book(enriched_data):
                 print(f"      ✓ Saved to Directus")
                 success_count += 1
+                ungrounded_count += not grundad
                 total_cost += cost_usd
             else:
                 print(f"      ✗ Failed to save")
@@ -326,6 +308,7 @@ def run_enrichment_pipeline(
         else:
             print(f"      (dry-run: would save to Directus)")
             success_count += 1
+            ungrounded_count += not grundad
             total_cost += cost_usd
 
         print()
@@ -343,6 +326,9 @@ def run_enrichment_pipeline(
         print(f"✗ Errors: {error_count}")
     if quota_error_count > 0:
         print(f"⚠  Gemini quota (429 RESOURCE_EXHAUSTED): {quota_error_count}")
+    # Alltid utskriven, även som 0 — raden plockas upp i Healthchecks-kroppen
+    # och en saknad rad ska inte kunna läsas som "inga ogrundade".
+    print(f"⚠  Ogrundade (sparade utan webbkällor): {ungrounded_count} av {success_count}")
     print(f"💰 Total cost: ${total_cost:.6f} USD")
     if success_count > 0:
         print(f"   Average cost per book: ${total_cost/success_count:.6f} USD")
@@ -352,6 +338,7 @@ def run_enrichment_pipeline(
         'success_count': success_count,
         'error_count': error_count,
         'quota_error_count': quota_error_count,
+        'ungrounded_count': ungrounded_count,
         'total_cost': total_cost,
     }
 
@@ -374,8 +361,8 @@ def main() -> None:
     )
     parser.add_argument(
         "--model", "-m",
-        default="gemini-3-flash-preview",
-        help="Gemini model to use (default: gemini-3-flash-preview)",
+        default=DEFAULT_MODEL,
+        help=f"Gemini model to use (default: {DEFAULT_MODEL})",
     )
     parser.add_argument(
         "--delay", "-d",

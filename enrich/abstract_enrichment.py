@@ -21,6 +21,8 @@ from google import genai
 from google.genai.types import GenerateContentConfig, GoogleSearch, Tool
 from pydantic import BaseModel, Field
 
+from modell import DEFAULT_MODEL
+
 
 # ── Structured output schema ──────────────────────────────────────────────
 
@@ -204,8 +206,8 @@ def main() -> None:
     )
     parser.add_argument(
         "--model", "-m",
-        default="gemini-3-flash-preview",
-        help="Gemini model to use (default: gemini-3-flash-preview)",
+        default=DEFAULT_MODEL,
+        help=f"Gemini model to use (default: {DEFAULT_MODEL})",
     )
     parser.add_argument(
         "--delay", "-d",

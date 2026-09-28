@@ -220,7 +220,7 @@ The project includes AI-powered enrichment of bibliographic metadata using Googl
 cd enrich/
 uv run enrich_from_directus.py --limit 10        # Enrich 10 books
 uv run enrich_from_directus.py --dry-run        # Test without saving
-uv run enrich_from_directus.py --model gemini-1.5-pro  # Use Pro model
+uv run enrich_from_directus.py --model gemini-3.6-flash  # Annan modell (default i enrich/modell.py)
 ```
 
 **Cost tracking:**

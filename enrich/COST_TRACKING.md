@@ -22,13 +22,10 @@ Gemini API returnerar usage metadata i varje response:
 
 ### Pricing per Modell (per 1 miljon tokens)
 
-| Modell | Input Cost | Output Cost |
-|--------|-----------|-------------|
-| gemini-1.5-flash | $0.075 | $0.30 |
-| gemini-1.5-pro | $1.25 | $5.00 |
-| gemini-3-flash-preview | $0.075* | $0.30* |
-
-\* Samma pricing som 1.5-flash (antagande för beräkning)
+Priserna står i `enrich/modell.py` (`PRISER`), med datum då de gäller från —
+`gemini-3.8-flash` dubblas 2027-01-01. Utdata inkluderar thinking-tokens
+(`thoughts_token_count`). En modell utan pris ger en varning och kostnaden 0,
+inte ett gissat pris; de tidigare "antagna" priserna underskattade kostnaden.
 
 ### Beräkningsformel
 
@@ -207,27 +204,7 @@ Om ni berikade **10,000 böcker/månad:**
 
 ### Code Implementation
 
-Kostnadsberäkningen finns i `enrich_from_directus.py`:
-
-```python
-def calculate_cost(response, model: str) -> float:
-    """Calculate cost based on token usage."""
-    usage = response.usage_metadata
-    prompt_tokens = usage.prompt_token_count
-    output_tokens = usage.candidates_token_count
-
-    pricing = {
-        'gemini-1.5-flash': {'input': 0.075, 'output': 0.30},
-        'gemini-1.5-pro': {'input': 1.25, 'output': 5.00},
-    }
-
-    model_pricing = pricing.get(model, pricing['gemini-1.5-flash'])
-
-    input_cost = (prompt_tokens / 1_000_000) * model_pricing['input']
-    output_cost = (output_tokens / 1_000_000) * model_pricing['output']
-
-    return input_cost + output_cost
-```
+Kostnadsberäkningen finns i `enrich/modell.py` (`kostnad()`), gemensam för alla skript.
 
 ### Database Field
 

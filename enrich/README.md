@@ -32,7 +32,13 @@ uv run enrich_smart.py --dry-run --limit 10
 uv run enrich_smart.py --limit 100 --delay 2.0
 ```
 
-**VIKTIGT:** Använd endast modell `gemini-3-flash-preview` (default). Andra modeller stöder inte Google Search + JSON samtidigt.
+**Modell:** `gemini-3.8-flash` (default, satt i `modell.py` — gemensam för alla skript).
+Den tidigare preview-modellen är utfasad av Google. De stabila modellerna klarar
+Google Search + JSON i samma anrop, men **avgör själva om de söker** och hoppar
+ofta över sökningen (1 av 3 böcker i test 2026-09-28). Skripten instruerar därför
+modellen att söka, provar ett ogrundat svar en gång till och räknar det som
+fortfarande saknar källor som **ogrundat** — raden `Ogrundade (sparade utan
+webbkällor): N av M` hamnar i Healthchecks-kroppen.
 
 **Varför använda denna:**
 - ✅ Fungerar när du har 3000+ redan berikade böcker
@@ -85,7 +91,7 @@ Läser från fil, berikar, och sparar till fil. Bra för batch-processing av exp
 uv run abstract_enrichment.py --input books.json --output enriched_books.json
 
 # Använd annan modell
-uv run abstract_enrichment.py --model gemini-1.5-pro
+uv run abstract_enrichment.py --model gemini-3.6-flash
 
 # Custom delay
 uv run abstract_enrichment.py --delay 2.0
@@ -201,7 +207,7 @@ Enriched data innehåller:
 
 ## Rate Limits
 
-**Modell som används:** `gemini-3-flash-preview`
+**Modell som används:** `gemini-3.8-flash`
 - Med billing: 360 requests/minut, 10,000+ requests/dag
 - Gratis tier: 15 requests/minut, 1,500 requests/dag
 
@@ -211,9 +217,10 @@ Enriched data innehåller:
 
 ## Kostnad
 
-**Modell:** `gemini-3-flash-preview`
-- **Per bok:** ~$0.00013 - $0.00015 (0.013-0.015 öre)
-- **100 böcker:** ~$0.013 USD (~0.13 SEK)
+**Modell:** `gemini-3.8-flash` — $0.75 in / $3.75 ut per miljon tokens t.o.m.
+2026-12-31, därefter $1.50 / $7.50 (Googles prissida). Priset per bok beror på
+hur många thinking-tokens modellen använder; se `Cost:` per bok i loggen.
+Tidigare siffror här byggde på antagna priser och underskattade kostnaden.
 - **1000 böcker:** ~$0.13 USD (~1.30 SEK)
 
 **Gratis tier:** Upp till 1,500 requests/dag - perfekt för testning!

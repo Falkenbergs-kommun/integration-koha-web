@@ -14,7 +14,7 @@ Key improvements:
 
 Usage:
     uv run enrich_from_directus_v2.py --limit 100
-    uv run enrich_from_directus_v2.py --limit 50 --model gemini-1.5-pro
+    uv run enrich_from_directus_v2.py --limit 50 --model gemini-3.6-flash
     uv run enrich_from_directus_v2.py --dry-run
 """
 
@@ -44,8 +44,8 @@ DIRECTUS_API_URL = os.getenv('DIRECTUS_API_URL')
 DIRECTUS_API_TOKEN = os.getenv('DIRECTUS_API_TOKEN')
 GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
 
-# Default model. OBS: gemini-1.5-serien är avvecklad ur API:t (404 sedan 2026)
-DEFAULT_MODEL = 'gemini-3-flash-preview'
+# Modellval och priser delas med övriga skript (modell.py).
+from modell import DEFAULT_MODEL, kostnad  # noqa: E402
 DEFAULT_DELAY = 1.0  # seconds between API calls
 
 
@@ -392,27 +392,7 @@ def enrich_book(
 
 def calculate_cost(response, model: str) -> float:
     """Calculate cost based on token usage and model pricing."""
-    if not hasattr(response, 'usage_metadata'):
-        return 0.0
-
-    usage = response.usage_metadata
-    prompt_tokens = usage.prompt_token_count
-    output_tokens = usage.candidates_token_count
-
-    # Pricing per 1M tokens (as of 2025)
-    pricing = {
-        'gemini-1.5-flash': {'input': 0.075, 'output': 0.30},
-        'gemini-1.5-pro': {'input': 1.25, 'output': 5.00},
-        'gemini-2.0-flash-exp': {'input': 0.075, 'output': 0.30},
-        'gemini-3-flash-preview': {'input': 0.075, 'output': 0.30},
-    }
-
-    model_pricing = pricing.get(model, pricing['gemini-1.5-flash'])
-
-    input_cost = (prompt_tokens / 1_000_000) * model_pricing['input']
-    output_cost = (output_tokens / 1_000_000) * model_pricing['output']
-
-    return input_cost + output_cost
+    return kostnad(response, model)
 
 
 # ── Main Pipeline ─────────────────────────────────────────────────────────
