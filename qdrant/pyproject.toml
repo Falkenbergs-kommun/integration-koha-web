@@ -28,6 +28,11 @@ constraint-dependencies = [
     "pygments>=2.20.0",
     "requests>=2.33.0",
 ]
+# fastembed (alla versioner t.o.m. 0.9) kräver pillow<13 för sina bildmodeller.
+# Repot använder bara BM25 (text) och importerar aldrig Pillow, medan 12.3 har
+# ~40 kända sårbarheter (bl.a. heap overflow i JPEG/FPX). Provat 2026-10-24:
+# BM25 och testsviten fungerar med 13.0. Ta bort när fastembed släpper gränsen.
+override-dependencies = ["pillow>=13"]
 
 [project.scripts]
 sync-qdrant = "sync_to_qdrant:main"
