@@ -14,7 +14,7 @@ Key improvements:
 
 Usage:
     uv run enrich_from_directus_v2.py --limit 100
-    uv run enrich_from_directus_v2.py --limit 50 --model gemini-3.6-flash
+    uv run enrich_from_directus_v2.py --limit 50 --model gemini-3.8-flash
     uv run enrich_from_directus_v2.py --dry-run
 """
 
