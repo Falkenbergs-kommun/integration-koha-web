@@ -176,6 +176,26 @@ if [ -d "$ENRICH_DIR" ]; then
         STEP_OUTPUTS="${STEP_OUTPUTS}--- Enrich: FAILED ---\n${enrich_stats}\n\n"
     fi
     cd "$SCRIPT_DIR"
+
+    # Step 5b: Omberika berikningar utan/med en källa (gamla prompten utan
+    # katalogdata). 400/dygn håller oss under Googles grundningstak på 1 500
+    # anrop/dygn. Tar slut av sig själv: behandlade rader får date_updated.
+    STEP_TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S')
+    echo "[$STEP_TIMESTAMP] Starting sync: Re-enrich ungrounded..." >> "$LOG_FILE"
+    reenrich_output=$(cd "$ENRICH_DIR" && uv run reenrich_ungrounded.py --limit 400 2>&1)
+    reenrich_exit=$?
+    echo "$reenrich_output" >> "$LOG_FILE"
+    reenrich_stats=$(echo "$reenrich_output" | grep -E '^(Kvar|Omberikade|Behållna|Ogrundade|Errors|Total cost|Inget kvar)' | head -8)
+    if [ $reenrich_exit -eq 0 ]; then
+        echo "[$STEP_TIMESTAMP] Re-enrich ungrounded: SUCCESS" >> "$LOG_FILE"
+        STEP_OUTPUTS="${STEP_OUTPUTS}--- Omberikning: OK ---\n${reenrich_stats}\n\n"
+    else
+        echo "[$STEP_TIMESTAMP] Re-enrich ungrounded: FAILED" >> "$LOG_FILE"
+        echo "[$STEP_TIMESTAMP] ERROR: Re-enrich failed! Check ${LOG_FILE} for details." >> "$ERROR_LOG"
+        OVERALL_RESULT="PARTIAL_FAILURE"
+        STEP_OUTPUTS="${STEP_OUTPUTS}--- Omberikning: FAILED ---\n${reenrich_stats}\n\n"
+    fi
+    cd "$SCRIPT_DIR"
 fi
 
 # Step 6: Qdrant vector sync (depends on all previous data being current)

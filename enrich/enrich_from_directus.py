@@ -79,7 +79,7 @@ class DirectusClient:
         url = f"{self.api_url}/items/kft_koha_biblios"
         params = {
             'filter[abstract][_null]': 'true',
-            'fields': 'biblio_id,isbn_clean,isbn,title,author',
+            'fields': KATALOGFALT,
             'limit': limit * 3,  # Fetch extra in case some are already enriched
             'sort': '-biblio_id'  # Get newest first
         }
@@ -127,6 +127,87 @@ class DirectusClient:
 
 # ── Enrichment ───────────────────────────────────────────────────────────
 
+# Fält som hämtas från kft_koha_biblios och skickas med i prompten.
+KATALOGFALT = (
+    "biblio_id,isbn_clean,isbn,title,subtitle,author,publisher,"
+    "publication_place,publication_year,series_title,subjects_marc,"
+    "genre_form,sab_classification,language_code"
+)
+
+
+def _lista(varde) -> list[str]:
+    """MARC-fälten ligger i Directus som JSON-sträng, lista eller null.
+    series_title är en lista av objekt — då används namnet."""
+    if not varde:
+        return []
+    if isinstance(varde, str):
+        try:
+            varde = json.loads(varde)
+        except ValueError:
+            return [varde.strip()] if varde.strip() else []
+    if isinstance(varde, dict):
+        varde = [varde]
+    if not isinstance(varde, list):
+        return [str(varde)]
+    ut = []
+    for v in varde:
+        if isinstance(v, dict):
+            v = v.get("name")
+        if v and str(v).strip():
+            ut.append(str(v).strip())
+    return ut
+
+
+def bygg_prompt(book: dict) -> str:
+    """Prompt med bibliotekets katalogdata som fakta.
+
+    Tidigare fick modellen bara titel, författare och ISBN. För smala lokala
+    titlar ger webbsökningen ingenting, och då gissade modellen innehållet
+    utifrån titelorden — "Mitt sökande efter färg och form" (biblio 69716),
+    en målares självbiografi, blev en bok om textilkonst och vävning trots
+    att katalogen hade ämnesordet "Målare (bildkonstnärer)". Katalogdatan är
+    katalogiserad av bibliotekarier och väger därför tyngre än både sökträffar
+    och modellens minne.
+    """
+    titel = book.get("title") or ""
+    if book.get("subtitle"):
+        titel = f"{titel} : {book['subtitle']}"
+    utgivning = ", ".join(
+        str(x) for x in (book.get("publication_place"), book.get("publisher"),
+                         book.get("publication_year")) if x
+    )
+    rader = [
+        ("Titel", titel),
+        ("Författare", book.get("author") or ""),
+        ("ISBN", book.get("isbn_clean") or book.get("isbn") or ""),
+        ("Utgivning", utgivning),
+        ("Serie", "; ".join(_lista(book.get("series_title")))),
+        ("Ämnesord", "; ".join(_lista(book.get("subjects_marc")))),
+        ("Genre/form", "; ".join(_lista(book.get("genre_form")))),
+        ("SAB-klassifikation", "; ".join(_lista(book.get("sab_classification")))),
+        ("Språkkod", book.get("language_code") or ""),
+    ]
+    katalog = "\n".join(f"{namn}: {varde}" for namn, varde in rader if varde)
+
+    return (
+        "Sök information om följande bok och beskriv vad den handlar om.\n\n"
+        "Katalogdata från bibliotekets katalog (fakta, katalogiserade av bibliotekarier):\n"
+        f"{katalog}\n\n"
+        "Regler:\n"
+        "- Katalogdatan är korrekt. Motsäg den aldrig — varken om bokens ämne, "
+        "genre eller vad författaren arbetar med.\n"
+        "- Använd bara sökträffar som tydligt gäller just den här boken (samma titel, "
+        "författare eller ISBN). Personer eller böcker med liknande namn är inte samma.\n"
+        "- Hittar du inget om boken: skriv en kort, försiktig beskrivning som bara "
+        "bygger på katalogdatan. Hitta aldrig på innehåll, yrken, platser eller "
+        "händelser som inte står i katalogdatan eller i sökträffarna.\n\n"
+        "Ge en koncis sammanfattning på svenska om bokens innehåll, teman och målgrupp. "
+        "Inkludera relevanta ämnesord samt 5-10 beskrivande taggar (lowercase) som fångar "
+        "bokens ämnen, teman och praktiska områden."
+    )
+
+
+
 def extract_grounding(response) -> dict:
     """Extract grounding metadata (sources) from a Gemini response."""
     grounding: dict = {"search_queries": [], "sources": []}
@@ -160,18 +241,7 @@ def enrich_book(
     används det ändå — anroparen räknar det som ogrundat så att andelen syns.
     Returns (enrichment, grounding_metadata, cost_usd, is_quota_err)."""
     title = book.get("title", "")
-    author = book.get("author", "")
-    isbn = book.get("isbn_clean") or book.get("isbn", "")
-
-    prompt = (
-        f"Sök information om följande bok och beskriv vad den handlar om.\n\n"
-        f"Titel: {title}\n"
-        f"Författare: {author}\n"
-        f"ISBN: {isbn}\n\n"
-        f"Ge en koncis sammanfattning på svenska om bokens innehåll, teman och målgrupp. "
-        f"Inkludera relevanta ämnesord samt 5-10 beskrivande taggar (lowercase) som fångar "
-        f"bokens ämnen, teman och praktiska områden."
-    )
+    prompt = bygg_prompt(book)
 
     config = GenerateContentConfig(
         system_instruction=SOK_INSTRUKTION,

@@ -245,6 +245,24 @@ uv run enrich_from_directus.py --model gemini-3.6-flash  # Annan modell (default
   **ogrundat**. Raden `Ogrundade (sparade utan webbkällor): N av M` skrivs
   alltid (även 0) och når Healthchecks. Är andelen ofta hög: prova
   `gemini-3.6-flash`, som sökte oftare i test.
+- **Prompten bär katalogdata som fakta** (`bygg_prompt()` i
+  `enrich_from_directus.py`): undertitel, utgivning, serie, MARC-ämnesord,
+  genre/form och SAB skickas med, och modellen får inte motsäga dem. Tidigare
+  fick den bara titel/författare/ISBN, och för lokala titlar utan webbträffar
+  gissade den utifrån titelorden — biblio 69716, en målares självbiografi,
+  beskrevs som textilkonst trots ämnesordet "Målare (bildkonstnärer)".
+  5 889 av 35 428 berikningar (mest feb–mar 2026) saknar källor och är
+  skrivna med den gamla prompten. Manuella rättelser i `kft_koha_enriched`
+  skrivs inte över: synken hoppar över biblios som redan har en rad där.
+- **`reenrich_ungrounded.py`** (steg 5b i `sync_cron.sh`, 400/dygn) omberikar
+  rader med 0 källor (ersätts alltid) och sedan 1 källa (ersätts bara om nya
+  svaret har källor). Rader med `date_updated` satt hoppas över — det betyder
+  manuell rättelse *eller* redan behandlad; varje behandlad rad PATCH:as så
+  körningen tar slut av sig själv ("Inget kvar att omberika"). Rätta därför
+  en berikning för hand med PATCH, aldrig genom att radera och skapa om raden.
+  Googles grundning: 1 500 anrop/dygn (Pacific-dygn) och 5 000 gratis
+  sökningar/månad, därefter $14/1 000 — den kostnaden syns inte i
+  `enrichment_cost_usd`.
 - `sync_cron.sh` filtrerar bort raderna per bok före `head -10` — annars
   trängs sammanfattningen ut ur Healthchecks-kroppen vid stora körningar.
 - Modellens livscykel bevakas i Dependabot-översikten (fliken AI & API:er).
