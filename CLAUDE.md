@@ -241,8 +241,11 @@ uv run enrich_from_directus.py --model gemini-3.6-flash  # Annan modell (default
 - **De stabila Gemini-modellerna söker inte alltid.** Till skillnad från den
   tidigare preview-modellen avgör de själva om Google Search används, och
   Gemini API kan inte tvinga fram det. Därför: `SOK_INSTRUKTION`, ett nytt
-  försök om svaret saknar källor, och sedan sparas det men räknas som
-  **ogrundat**. Raden `Ogrundade (sparade utan webbkällor): N av M` skrivs
+  försök om svaret saknar källor, och sedan räknas det som **ogrundat**.
+  Då sparas raden utan beskrivning, ämnen, taggar och målgrupp
+  (`beskrivningsfalt()`): förbudet i prompten räcker inte, modellen skrev
+  ändå handlingar och priser ur minnet. Raden
+  `Ogrundade (sparade utan beskrivning): N av M` skrivs
   alltid (även 0) och når Healthchecks. Är andelen ofta hög: prova
   `gemini-3.6-flash`, som sökte oftare i test.
 - **Prompten bär katalogdata som fakta** (`bygg_prompt()` i
@@ -255,8 +258,9 @@ uv run enrich_from_directus.py --model gemini-3.6-flash  # Annan modell (default
   skrivna med den gamla prompten. Manuella rättelser i `kft_koha_enriched`
   skrivs inte över: synken hoppar över biblios som redan har en rad där.
 - **`reenrich_ungrounded.py`** (steg 5b i `sync_cron.sh`, 400/dygn) omberikar
-  rader med 0 källor (ersätts alltid) och sedan 1 källa (ersätts bara om nya
-  svaret har källor). Rader med `date_updated` satt hoppas över — det betyder
+  rader med 0 källor (ersätts om nya svaret har källor, annars töms
+  beskrivningen) och sedan 1 källa (ersätts bara om nya svaret har källor).
+  Rader med `date_updated` satt hoppas över — det betyder
   manuell rättelse *eller* redan behandlad; varje behandlad rad PATCH:as så
   körningen tar slut av sig själv ("Inget kvar att omberika"). Rätta därför
   en berikning för hand med PATCH, aldrig genom att radera och skapa om raden.

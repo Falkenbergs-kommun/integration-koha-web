@@ -185,7 +185,7 @@ if [ -d "$ENRICH_DIR" ]; then
     reenrich_output=$(cd "$ENRICH_DIR" && uv run reenrich_ungrounded.py --limit 400 2>&1)
     reenrich_exit=$?
     echo "$reenrich_output" >> "$LOG_FILE"
-    reenrich_stats=$(echo "$reenrich_output" | grep -E '^(Kvar|Omberikade|Behållna|Ogrundade|Errors|Total cost|Inget kvar)' | head -8)
+    reenrich_stats=$(echo "$reenrich_output" | grep -E '^(Kvar|Omberikade|Behållna|Rensade|Errors|Total cost|Inget kvar)' | head -8)
     if [ $reenrich_exit -eq 0 ]; then
         echo "[$STEP_TIMESTAMP] Re-enrich ungrounded: SUCCESS" >> "$LOG_FILE"
         STEP_OUTPUTS="${STEP_OUTPUTS}--- Omberikning: OK ---\n${reenrich_stats}\n\n"

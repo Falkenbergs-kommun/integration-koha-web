@@ -9,7 +9,7 @@ en målares självbiografi, blev en bok om textilkonst). Den nya prompten
 
 Urval, i prioritetsordning:
   1. Inga källor (grounding_sources tom) — svaret är modellens gissning.
-     Ersätts alltid: den nya prompten är bunden till katalogdatan.
+     Får det nya svaret källor ersätts texten; annars töms beskrivningen.
   2. Exakt en källa — tveksamt (ofta Wikipedia/blogg/YouTube om en annan
      person). Ersätts bara om det nya svaret har minst en källa; annars
      behålls den befintliga texten.
@@ -38,7 +38,7 @@ import requests
 from dotenv import load_dotenv
 from google import genai
 
-from enrich_from_directus import KATALOGFALT, DirectusClient, enrich_book
+from enrich_from_directus import KATALOGFALT, DirectusClient, beskrivningsfalt, enrich_book
 from modell import DEFAULT_MODEL, ar_grundad
 
 
@@ -133,7 +133,7 @@ def main() -> int:
 
     katalog = hamta_katalogdata(d, [k["biblio_id"] for k in urval])
 
-    ersatta = behallna = ogrundade = fel = kvot = markerade = 0
+    ersatta = behallna = rensade = fel = kvot = markerade = 0
     kostnad_tot = 0.0
     for i, rad in enumerate(urval, 1):
         bok = katalog.get(rad["biblio_id"])
@@ -155,28 +155,28 @@ def main() -> int:
             continue
 
         grundad = ar_grundad(gr)
-        ogrundade += not grundad
         total_kostnad = (rad.get("enrichment_cost_usd") or 0) + cost
 
         if rad["kallor"] == 0 or grundad:
             data = {
-                "abstract_enriched": enr.abstract_enriched,
-                "subjects": enr.subjects,
-                "tags": enr.tags,
-                "target_audience": enr.target_audience,
+                **beskrivningsfalt(enr, gr),
                 "grounding_search_queries": gr.get("search_queries", []),
                 "grounding_sources": gr.get("sources", []),
                 "enrichment_cost_usd": total_kostnad,
             }
-            utfall = "ersatt" + ("" if grundad else " (ogrundad, katalogbaserad)")
-            ersatta += 1
+            if grundad:
+                utfall = f"ersatt: {enr.abstract_enriched[:90]}..."
+                ersatta += 1
+            else:
+                utfall = "rensad (inga källor, beskrivningen borttagen)"
+                rensade += 1
         else:
             # Hade en källa, nya svaret har ingen — behåll befintlig text.
             data = {"enrichment_cost_usd": total_kostnad}
             utfall = "behållen (nytt svar saknade källor)"
             behallna += 1
 
-        print(f"      {utfall}: {enr.abstract_enriched[:90]}...")
+        print(f"      {utfall}")
         if not args.dry_run:
             if patcha(d, rad["id"], data):
                 markerade += 1
@@ -189,13 +189,13 @@ def main() -> int:
     print("=" * 60)
     print(f"Omberikade (ersatta): {ersatta}")
     print(f"Behållna (nytt svar utan källor): {behallna}")
-    print(f"Ogrundade nya svar: {ogrundade}")
+    print(f"Rensade (inga källor, beskrivningen borttagen): {rensade}")
     print(f"Errors: {fel}" + (f" (varav kvot/429: {kvot})" if kvot else ""))
     print(f"Total cost: ${kostnad_tot:.4f} USD (exkl. Google Search-avgift)")
     print(f"Kvar efter körningen: {len(kandidater) - markerade}")
 
     # Fel på en enstaka bok ska inte larma; systematiska fel ska det.
-    behandlade = ersatta + behallna + fel
+    behandlade = ersatta + behallna + rensade + fel
     return 1 if behandlade and fel / behandlade > 0.2 else 0
 
 

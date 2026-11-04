@@ -238,7 +238,7 @@ def enrich_book(
 
     De stabila modellerna hoppar ofta över sökningen och svarar ur minnet.
     Ett svar utan källor provas därför en gång till; blir även det ogrundat
-    används det ändå — anroparen räknar det som ogrundat så att andelen syns.
+    sparar anroparen ingen beskrivning (se `beskrivningsfalt`).
     Returns (enrichment, grounding_metadata, cost_usd, is_quota_err)."""
     title = book.get("title", "")
     prompt = bygg_prompt(book)
@@ -266,6 +266,23 @@ def enrich_book(
         err_str = str(exc)
         is_quota_err = "429" in err_str or "RESOURCE_EXHAUSTED" in err_str
         return None, {"search_queries": [], "sources": []}, 0.0, is_quota_err
+
+
+def beskrivningsfalt(enrichment: BookEnrichment, grounding: dict) -> dict:
+    """Fälten som visas för låntagare. Tomma om svaret saknar webbkällor.
+
+    Utan källor kommer svaret ur modellens minne, även med förbudet i prompten:
+    i stickprov 2026-11-04 skrev den detaljerade handlingar och priser som inte
+    fanns i katalogen. Ingen text är bättre än en som kan vara påhittad. Raden
+    sparas ändå, så att boken inte berikas på nytt varje natt.
+    """
+    if not ar_grundad(grounding):
+        return {"abstract_enriched": None, "subjects": None,
+                "tags": None, "target_audience": None}
+    return {"abstract_enriched": enrichment.abstract_enriched,
+            "subjects": enrichment.subjects,
+            "tags": enrichment.tags,
+            "target_audience": enrichment.target_audience}
 
 
 # ── Pipeline ──────────────────────────────────────────────────────────────
@@ -350,7 +367,7 @@ def run_enrichment_pipeline(
         print(f"        Cost: ${cost_usd:.6f} USD")
         grundad = ar_grundad(grounding)
         if not grundad:
-            print(f"      ⚠  Ogrundad: inga webbkällor efter två försök — svaret bygger på modellens minne")
+            print(f"      ⚠  Ogrundad: inga webbkällor efter två försök — sparas utan beskrivning")
 
         # Step 4: Save to Directus
         if not dry_run:
@@ -358,10 +375,7 @@ def run_enrichment_pipeline(
                 'biblio_id': biblio_id,
                 'isbn_clean': book.get('isbn_clean'),
                 'title': title,
-                'abstract_enriched': enrichment.abstract_enriched,
-                'subjects': enrichment.subjects,
-                'tags': enrichment.tags,
-                'target_audience': enrichment.target_audience,
+                **beskrivningsfalt(enrichment, grounding),
                 'grounding_search_queries': grounding.get('search_queries', []),
                 'grounding_sources': grounding.get('sources', []),
                 'enrichment_cost_usd': cost_usd
@@ -398,7 +412,7 @@ def run_enrichment_pipeline(
         print(f"⚠  Gemini quota (429 RESOURCE_EXHAUSTED): {quota_error_count}")
     # Alltid utskriven, även som 0 — raden plockas upp i Healthchecks-kroppen
     # och en saknad rad ska inte kunna läsas som "inga ogrundade".
-    print(f"⚠  Ogrundade (sparade utan webbkällor): {ungrounded_count} av {success_count}")
+    print(f"⚠  Ogrundade (sparade utan beskrivning): {ungrounded_count} av {success_count}")
     print(f"💰 Total cost: ${total_cost:.6f} USD")
     if success_count > 0:
         print(f"   Average cost per book: ${total_cost/success_count:.6f} USD")
