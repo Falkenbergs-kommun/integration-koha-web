@@ -1,8 +1,10 @@
 <?php
 // Debug-script för att se RSS-strukturen
+require_once __DIR__ . '/common.php';
+
 header('Content-Type: text/html; charset=utf-8');
 
-$rssUrl = 'https://bibliotekskatalog.falkenberg.se/cgi-bin/koha/opac-shelves.pl?rss=1&op=view&shelfnumber=247';
+$rssUrl = 'https://bibliotekskatalog.falkenberg.se/cgi-bin/koha/opac-shelves.pl?rss=1&op=view&shelfnumber=' . DEFAULT_SHELF;
 
 // Hämta RSS-feed med full info
 $ch = curl_init();

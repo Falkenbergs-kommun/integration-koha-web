@@ -27,9 +27,9 @@ header('Cache-Control: no-cache, must-revalidate');
 header('X-Content-Type-Options: nosniff');
 
 // Hyllnummer: bara positiva heltal (samma regel som ?id i list.php). Utelämnat
-// ger standardhyllan 247. intval() släppte tidigare igenom negativa tal och
+// ger standardhyllan (DEFAULT_SHELF i common.php). intval() släppte tidigare igenom negativa tal och
 // arrayer, som blev egna cache-filer och Koha-anrop för hyllor som inte finns.
-$rawShelf = '247';
+$rawShelf = (string) DEFAULT_SHELF;
 if (isset($_GET['shelfnumber'])) {
     $rawShelf = is_string($_GET['shelfnumber']) ? trim($_GET['shelfnumber']) : '';
 }

@@ -30,7 +30,9 @@ $baseUrl = getenv('BASE_URL') ?: 'https://bibliotek.falkenberg.se/fbg_apps/servi
 
 // ---------------------------------------------------------------
 // 1. Hitta källfiler: cache_shelf{N}_json.cache, cache_list_{N}.json
-//    samt cache.json (index.php, hårdkodad till hylla 247).
+//    samt cache.json (index.php, fast lista). Listnumret för cache.json läses
+//    ur filens egen kanal-länk (viewshelf=N): filen kan vara skriven innan
+//    DEFAULT_SHELF byttes och hör då till den gamla listan.
 //    Förgiftade/tomma filer (items: []) skippas automatiskt.
 // ---------------------------------------------------------------
 $sources = []; // shelfNumber => ['file' => ..., 'data' => ..., 'items' => int]
@@ -66,7 +68,11 @@ foreach (glob($cacheDir . '/cache_list_*.json') as $file) {
     }
 }
 if (file_exists($cacheDir . '/cache.json')) {
-    considerSource($sources, 247, $cacheDir . '/cache.json', $verbose);
+    $indexData = json_decode(file_get_contents($cacheDir . '/cache.json'), true);
+    $indexShelf = preg_match('/viewshelf=(\d+)/', $indexData['channel']['link'] ?? '', $m)
+        ? (int)$m[1]
+        : DEFAULT_SHELF;
+    considerSource($sources, $indexShelf, $cacheDir . '/cache.json', $verbose);
 }
 
 if ($onlyShelf !== null) {

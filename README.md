@@ -85,26 +85,26 @@ chmod 600 .env
 
 **JSON-format (default):**
 ```bash
-# Default shelf (247)
+# Default shelf (603 "Beredskap", se DEFAULT_SHELF i common.php)
 https://bibliotek.falkenberg.se/fbg_apps/services/koha/shelf.php
 
 # Specifik shelf
 https://bibliotek.falkenberg.se/fbg_apps/services/koha/shelf.php?shelfnumber=123
 
 # Med både shelfnumber och format
-https://bibliotek.falkenberg.se/fbg_apps/services/koha/shelf.php?shelfnumber=247&format=json
+https://bibliotek.falkenberg.se/fbg_apps/services/koha/shelf.php?shelfnumber=603&format=json
 ```
 
 **XML-format:**
 ```bash
-# Default shelf (247) i XML
+# Default shelf i XML
 https://bibliotek.falkenberg.se/fbg_apps/services/koha/shelf.php?format=xml
 
 # Specifik shelf i XML
 https://bibliotek.falkenberg.se/fbg_apps/services/koha/shelf.php?shelfnumber=123&format=xml
 ```
 
-#### 2. **index.php** - Hårdkodad till shelf 247 (JSON)
+#### 2. **index.php** - Fast lista, samma som standardhyllan (`DEFAULT_SHELF`, JSON)
 
 ```bash
 https://bibliotek.falkenberg.se/fbg_apps/services/koha/index.php
@@ -113,7 +113,7 @@ https://bibliotek.falkenberg.se/fbg_apps/services/koha/index.php
 #### 3. **list.php** - Dynamisk lista med id-parameter (JSON)
 
 ```bash
-https://bibliotek.falkenberg.se/fbg_apps/services/koha/list.php?id=247
+https://bibliotek.falkenberg.se/fbg_apps/services/koha/list.php?id=603
 ```
 
 #### 4. **latest.php** - Senaste böckerna i katalogen (nyinköp)
@@ -186,7 +186,7 @@ https://bibliotek.falkenberg.se/fbg_apps/services/koha/debug.php
 
 | Parameter | Värden | Standard | Beskrivning |
 |-----------|--------|----------|-------------|
-| `shelfnumber` | positivt heltal | 247 | Kohas shelf-ID (shelf.php). Annat värde ger HTTP 400 |
+| `shelfnumber` | positivt heltal | 603 (`DEFAULT_SHELF`) | Kohas shelf-ID (shelf.php). Annat värde ger HTTP 400 |
 | `biblionumber` | positivt heltal | - | Kohas biblio-ID (book.php) **Obligatorisk**. Annat värde ger HTTP 400 |
 | `format` | json, xml | json | Svarsformat (shelf.php, latest.php, book.php) |
 | `id` | integer | - | List-ID (endast list.php) |
@@ -410,7 +410,7 @@ Se [js/README.md](js/README.md) för fullständig dokumentation och [js/example.
 
 ### shelf.php (Directus-first, sedan aug 2026)
 
-1. Klient gör förfrågan till endpoint (t.ex. `shelf.php?shelfnumber=247&format=json`)
+1. Klient gör förfrågan till endpoint (t.ex. `shelf.php?shelfnumber=603&format=json`)
 2. Kontrollera filbaserad cache (1 timmes TTL) - returnera omedelbart om giltig
 3. Kontrollera fail-flagga - vid nyligt Koha-fel (< 30 min, konfigurerbart via `KOHA_FAIL_THROTTLE`) serveras snapshot direkt utan nytt Koha-försök
 4. Hämta RSS-feed från bibliotekskatalog.falkenberg.se (**enda Koha-anropet i hela requesten** - ger hyllmedlemskap + kanalinfo)
@@ -455,7 +455,7 @@ Scriptet tar hyllmedlemskap från senast kända friska cachefil (`cache_shelf*_j
 .
 ├── shelf.php            # Flexibel endpoint med shelfnumber och format-stöd
 ├── book.php             # Endpoint för enskild bok med biblionumber
-├── index.php            # Enkel endpoint (shelf 247, JSON)
+├── index.php            # Enkel endpoint (standardhyllan, JSON)
 ├── list.php             # Dynamisk lista med ?id parameter
 ├── latest.php           # Senaste böckerna via API (nyinköp)
 ├── common.php           # Delad funktionsbibliotek
@@ -588,6 +588,29 @@ Kunde inte hämta RSS-feed
 ```
 **Lösning**: Kontrollera att shelfnumber finns och är publikt tillgänglig
 
+**Gammalt innehåll med `"stale": true` fast Koha är uppe:**
+
+En lista som tagits bort eller gjorts privat i Koha ger inget fel, utan en tom
+RSS-kanal med HTTP 200. Förgiftningsskyddet kan inte skilja det från ett
+tillfälligt tomt svar och fortsätter servera den senaste snapshoten —
+`cached_at` visar hur gammal den är. Så försvann standardlistan 247
+("Nyheter ung") 2026: `index.php` och `shelf.php` utan parameter visade en
+snapshot från maj i ett halvår.
+
+```bash
+# Finns listan? Tom <channel> utan <title> och <item> = borttagen eller privat
+curl -s -b KOHA_INIT=1 "https://bibliotekskatalog.falkenberg.se/cgi-bin/koha/opac-shelves.pl?rss=1&op=view&shelfnumber=603"
+
+# Vilka publika listor finns?
+# https://bibliotekskatalog.falkenberg.se/cgi-bin/koha/opac-shelves.pl?op=list&public=1
+```
+
+**Lösning**: Gäller det en lista som en sida anropar med `?shelfnumber=`/`?id=`,
+byt nummer på sidan. Gäller det standardlistan, byt `DEFAULT_SHELF` i
+`common.php` — det är enda stället. `index.php` har fasta filnamn
+(`cache.json`, `snapshot_index.json`), så den gamla listans snapshot ligger
+kvar tills första lyckade hämtningen av den nya skriver över den.
+
 **XML-parsningsfel:**
 ```
 Kunde inte parsa XML-data
@@ -603,7 +626,7 @@ Kunde inte parsa XML-data
 php -S localhost:8000
 
 # Testa endpoint
-curl "http://localhost:8000/shelf.php?shelfnumber=247&format=json"
+curl "http://localhost:8000/shelf.php?shelfnumber=603&format=json"
 curl "http://localhost:8000/shelf.php?format=xml"
 ```
 
@@ -695,7 +718,7 @@ ls -1 images/ | wc -l
 
 ```bash
 # JSON med curl
-curl -s "https://bibliotek.falkenberg.se/fbg_apps/services/koha/shelf.php?shelfnumber=247" | jq .
+curl -s "https://bibliotek.falkenberg.se/fbg_apps/services/koha/shelf.php?shelfnumber=603" | jq .
 
 # XML med curl
 curl -s "https://bibliotek.falkenberg.se/fbg_apps/services/koha/shelf.php?format=xml" | xmllint --format -

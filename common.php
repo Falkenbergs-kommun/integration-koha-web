@@ -1,6 +1,15 @@
 <?php
 // Gemensamma funktioner för bibliotekssystemet
 
+// Standardlista i Koha: index.php (fast lista) och shelf.php utan ?shelfnumber.
+// 603 = "Beredskap". Fram till 2026-11 var det 247 ("Nyheter ung"), men den
+// listan togs bort ur Koha. En borttagen lista ger tom RSS med HTTP 200, vilket
+// förgiftningsskyddet behandlar som ett tillfälligt fel — endpointsen serverade
+// därför en snapshot från maj i ett halvår utan att något larmade. Byt värdet
+// här om även den här listan försvinner; kontrollera först att den nya finns på
+// https://bibliotekskatalog.falkenberg.se/cgi-bin/koha/opac-shelves.pl?op=list&public=1
+const DEFAULT_SHELF = 603;
+
 // Enkel .env-laddare utan externa beroenden
 function loadEnv($filePath) {
     if (!file_exists($filePath)) {

@@ -1,5 +1,6 @@
 <?php
-// RSS till JSON-konverterare för Falkenbergs bibliotek (fast lista 247).
+// RSS till JSON-konverterare för Falkenbergs bibliotek (fast lista: DEFAULT_SHELF
+// i common.php).
 // Directus-first (samma mönster som shelf.php/list.php): Koha-RSS:en ger bara
 // listmedlemskap — ett enda Koha-anrop — och all bokmetadata hämtas i bulk
 // från Directus i stället för ett API-anrop per bok.
@@ -33,7 +34,7 @@ if (file_exists($cacheFile) && (time() - filemtime($cacheFile)) < $cacheMaxAge) 
 }
 
 $baseUrl = getenv('BASE_URL') ?: 'https://bibliotek.falkenberg.se/fbg_apps/services/koha/';
-$rssUrl = 'https://bibliotekskatalog.falkenberg.se/cgi-bin/koha/opac-shelves.pl?rss=1&op=view&shelfnumber=247';
+$rssUrl = 'https://bibliotekskatalog.falkenberg.se/cgi-bin/koha/opac-shelves.pl?rss=1&op=view&shelfnumber=' . DEFAULT_SHELF;
 
 // Fail-throttle: vid nyligt Koha-fel, gå direkt på snapshot utan nytt försök
 if (recentFailureExists($failFlagFile)) {
