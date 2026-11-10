@@ -226,8 +226,12 @@ uv run enrich_from_directus.py --model gemini-3.6-flash  # Annan modell (default
 
 **Cost tracking:**
 - Typical cost (mätt 2026-11-10, `gemini-3.8-flash`, priset dubblas 2027-01-01):
-  **~$0.004 per bok grundad i Libris**, **~$0.02–0.03 per bok via Google
-  Search** — sökavgiften dominerar.
+  **~$0.004 per bok grundad i Libris** (bara tokens) och **~$0.05 (0,5 kr)
+  per bok via Google Search** — sökavgiften dominerar. Google-siffran är
+  verklig: AI Studios dygnskostnad 5–8 nov delat med antal berikade böcker.
+  Loggens egen uppskattning blir bara ~$0.02–0.03, eftersom
+  `web_search_queries` visar färre frågor än Google debiterar. Lita på AI
+  Studio, inte på `enrichment_cost_usd`, för Google-vägen.
 - Costs calculated from actual token usage, **inklusive thinking-tokens** och
   sökträffarna i kontexten (`tool_use_prompt_token_count`)
 - **Sökavgiften ingår sedan 2026-11-10** (`sokkostnad()` i `modell.py`,

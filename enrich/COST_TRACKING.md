@@ -1,8 +1,10 @@
 # Cost Tracking för Gemini API Enrichment
 
 > **Aktuella siffror (mätt 2026-11-10, `gemini-3.8-flash`):**
-> **~$0.004 per bok grundad i Libris** och **~$0.02–0.03 per bok via Google
-> Search**. Exemplen och kalkylerna längre ned ($0.00015/bok) är från en tid
+> **~$0.004 per bok grundad i Libris** (bara tokens) och **~$0.05 (0,5 kr) per
+> bok via Google Search** — det senare är AI Studios dygnskostnad 5–8 nov delat
+> med antal böcker. Loggens uppskattning för Google-vägen blir bara ~$0.02–0.03
+> eftersom `web_search_queries` visar färre sökfrågor än Google debiterar. Exemplen och kalkylerna längre ned ($0.00015/bok) är från en tid
 > med gissade priser och utan sökavgift — de underskattar kraftigt.
 >
 > **Google Search-grundning kostar per sökfråga**, $14 per 1 000 efter 5 000

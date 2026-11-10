@@ -18,7 +18,7 @@ och Libris-posterna sparas som `grounding_sources`.
 
 Skälet är kostnaden: Google debiterar **per sökfråga** ($14/1 000), och det
 gav 200–250 kr/dygn tills spendtaket slog i. Med Libris kostar en bok
-~$0.004, via Google ~$0.02–0.03. Libris hade text för ungefär hälften av
+~$0.004, via Google ~$0.05 (verkligt, enligt AI Studio). Libris hade text för ungefär hälften av
 böckerna i test. Se `COST_TRACKING.md`.
 
 ### `reenrich_ungrounded.py`
@@ -253,7 +253,8 @@ kostar dessutom **$14 per 1 000 sökfrågor** efter 5 000 gratis/månad.
 
 Mätt 2026-11-10:
 - **Grundad i Libris:** ~$0.004 per bok (1 000 böcker ≈ $4)
-- **Via Google Search:** ~$0.02–0.03 per bok, där sökavgiften dominerar
+- **Via Google Search:** ~$0.05 per bok enligt AI Studio, där sökavgiften dominerar.
+  Loggens `Cost:` visar bara ~$0.02–0.03: svaren redovisar färre sökfrågor än som debiteras.
 
 `Cost:` per bok i loggen och `enrichment_cost_usd` inkluderar sökavgiften
 sedan 2026-11-10 (utan avdrag för gratiskvoten). Facit är AI Studios
