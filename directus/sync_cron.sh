@@ -180,7 +180,17 @@ if [ -d "$ENRICH_DIR" ]; then
     # Step 5b: Omberika berikningar utan/med en källa (gamla prompten utan
     # katalogdata). 400/dygn håller oss under Googles grundningstak på 1 500
     # anrop/dygn. Tar slut av sig själv: behandlade rader får date_updated.
+    #
+    # PAUSAD 2026-11-10: Google-grundningen debiteras per sökfråga och syns inte
+    # i enrichment_cost_usd. Verklig kostnad var ~200-250 kr/dygn mot loggade
+    # ~20 kr, och projektets spendtak slog i. Pausad tills grundningen byggts om
+    # mot andra källor. Sätt REENRICH_PAUSED=0 för att slå på igen.
+    REENRICH_PAUSED=1
     STEP_TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S')
+    if [ "$REENRICH_PAUSED" = "1" ]; then
+        echo "[$STEP_TIMESTAMP] Re-enrich ungrounded: PAUSED (sökavgifter, se sync_cron.sh)" >> "$LOG_FILE"
+        STEP_OUTPUTS="${STEP_OUTPUTS}--- Omberikning: PAUSAD (sökavgifter) ---\n\n"
+    else
     echo "[$STEP_TIMESTAMP] Starting sync: Re-enrich ungrounded..." >> "$LOG_FILE"
     reenrich_output=$(cd "$ENRICH_DIR" && uv run reenrich_ungrounded.py --limit 400 2>&1)
     reenrich_exit=$?
@@ -194,6 +204,7 @@ if [ -d "$ENRICH_DIR" ]; then
         echo "[$STEP_TIMESTAMP] ERROR: Re-enrich failed! Check ${LOG_FILE} for details." >> "$ERROR_LOG"
         OVERALL_RESULT="PARTIAL_FAILURE"
         STEP_OUTPUTS="${STEP_OUTPUTS}--- Omberikning: FAILED ---\n${reenrich_stats}\n\n"
+    fi
     fi
     cd "$SCRIPT_DIR"
 fi
