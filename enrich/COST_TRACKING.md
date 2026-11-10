@@ -1,5 +1,20 @@
 # Cost Tracking för Gemini API Enrichment
 
+> **Aktuella siffror (mätt 2026-11-10, `gemini-3.8-flash`):**
+> **~$0.004 per bok grundad i Libris** och **~$0.02–0.03 per bok via Google
+> Search**. Exemplen och kalkylerna längre ned ($0.00015/bok) är från en tid
+> med gissade priser och utan sökavgift — de underskattar kraftigt.
+>
+> **Google Search-grundning kostar per sökfråga**, $14 per 1 000 efter 5 000
+> gratis/månad. Den avgiften saknades i `enrichment_cost_usd` fram till
+> 2026-11-10: loggen visade ~20 kr/dygn medan AI Studio visade 200–250 kr/dygn,
+> och projektets månatliga spendtak slog i (429 `RESOURCE_EXHAUSTED` med
+> "exceeded its monthly spending cap" — inte en rate limit). Sedan dess räknas
+> sökavgiften med (`sokkostnad()` i `modell.py`, utan avdrag för gratiskvoten,
+> alltså en övre gräns), och berikningen tar texter ur Libris först
+> (`libris.py`) så att de flesta böcker inte behöver någon sökning alls.
+> Facit är alltid AI Studios kostnadsvy (Spend), inte summan i Directus.
+
 ## Översikt
 
 Varje enrichment-anrop till Gemini API har nu kostnadsspårning. Kostnaden beräknas baserat på faktisk token-användning och sparas i databasen för varje berikad bok.
@@ -17,8 +32,13 @@ Varje enrichment-anrop till Gemini API har nu kostnadsspårning. Kostnaden berä
 
 Gemini API returnerar usage metadata i varje response:
 - `prompt_token_count` - Input tokens
+- `tool_use_prompt_token_count` - Sökträffar som grundningen lägger i kontexten (debiteras som input)
 - `candidates_token_count` - Output tokens
+- `thoughts_token_count` - Thinking-tokens (debiteras som output)
 - `total_token_count` - Totalt
+
+Sökfrågorna står i `grounding_metadata.web_search_queries` och räknas från
+alla försök (ett ogrundat svar provas en gång till).
 
 ### Pricing per Modell (per 1 miljon tokens)
 
@@ -32,7 +52,8 @@ inte ett gissat pris; de tidigare "antagna" priserna underskattade kostnaden.
 ```python
 input_cost = (prompt_tokens / 1_000_000) * input_price
 output_cost = (output_tokens / 1_000_000) * output_price
-total_cost = input_cost + output_cost
+search_cost = antal_sokfragor * 14 / 1000   # bara vid Google Search-grundning
+total_cost = input_cost + output_cost + search_cost
 ```
 
 ## Exempel Output

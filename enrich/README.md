@@ -2,6 +2,36 @@
 
 Automatisk berikning av bibliografisk metadata med Google Gemini AI.
 
+## Källor: Libris först, Google Search som reserv (sedan 2026-11-10)
+
+Nattjobbet (`sync_cron.sh`) kör `enrich_from_directus.py` och
+`reenrich_ungrounded.py`. Båda hämtar först beskrivande texter ur **Libris**
+(`libris.py` — KB:s katalog, gratis, ingen nyckel): MTM:s talböcker och
+Bokinfos förlagstexter för samma verk, via ISBN och via titel +
+författarens efternamn. Finns text görs ett Gemini-anrop **utan sökverktyg**,
+och Libris-posterna sparas som `grounding_sources`.
+
+| Skript | Utan Libris-text |
+|---|---|
+| `enrich_from_directus.py` (nya böcker) | Google Search-grundning som förut |
+| `reenrich_ungrounded.py` (omberikningskön) | Raden lämnas orörd, sparas i `.libris_missar.json`, provas igen efter 90 dagar |
+
+Skälet är kostnaden: Google debiterar **per sökfråga** ($14/1 000), och det
+gav 200–250 kr/dygn tills spendtaket slog i. Med Libris kostar en bok
+~$0.004, via Google ~$0.02–0.03. Libris hade text för ungefär hälften av
+böckerna i test. Se `COST_TRACKING.md`.
+
+### `reenrich_ungrounded.py`
+
+Omberikar rader i `kft_koha_enriched` med 0 och sedan 1 webbkälla (skrivna
+med den gamla prompten). Bara Libris, aldrig Google. `--limit` räknar
+Libris-uppslag (gratis); Gemini anropas bara vid träff.
+
+```bash
+uv run reenrich_ungrounded.py --dry-run --limit 40   # inget skrivs
+uv run reenrich_ungrounded.py --limit 1000           # som i nattjobbet
+```
+
 ## Scripts
 
 ### 1. `enrich_smart.py` (✨ REKOMMENDERAD FÖR STORA DATASET)
@@ -53,7 +83,7 @@ Hämtar böcker från Directus, berikar med Gemini AI, och sparar direkt tillbak
 **Funktioner:**
 - ✅ Hämtar böcker från `kft_koha_biblios` som saknar abstract
 - ✅ Filtrerar bort böcker som redan finns i `kft_koha_enriched`
-- ✅ Berikar med Google Gemini API + Google Search grounding
+- ✅ Berikar med Gemini, grundat i Libris-texter när de finns, annars Google Search
 - ✅ Sparar direkt till `kft_koha_enriched` via Directus API
 - ✅ Rate limiting för att undvika API-begränsningar
 
@@ -218,12 +248,17 @@ Enriched data innehåller:
 ## Kostnad
 
 **Modell:** `gemini-3.8-flash` — $0.75 in / $3.75 ut per miljon tokens t.o.m.
-2026-12-31, därefter $1.50 / $7.50 (Googles prissida). Priset per bok beror på
-hur många thinking-tokens modellen använder; se `Cost:` per bok i loggen.
-Tidigare siffror här byggde på antagna priser och underskattade kostnaden.
-- **1000 böcker:** ~$0.13 USD (~1.30 SEK)
+2026-12-31, därefter $1.50 / $7.50 (Googles prissida). Google Search-grundning
+kostar dessutom **$14 per 1 000 sökfrågor** efter 5 000 gratis/månad.
 
-**Gratis tier:** Upp till 1,500 requests/dag - perfekt för testning!
+Mätt 2026-11-10:
+- **Grundad i Libris:** ~$0.004 per bok (1 000 böcker ≈ $4)
+- **Via Google Search:** ~$0.02–0.03 per bok, där sökavgiften dominerar
+
+`Cost:` per bok i loggen och `enrichment_cost_usd` inkluderar sökavgiften
+sedan 2026-11-10 (utan avdrag för gratiskvoten). Facit är AI Studios
+kostnadsvy. Tidigare siffror här ($0.13 per 1 000 böcker) saknade sökavgiften
+och underskattade kostnaden runt tio gånger.
 
 **Jämförelse:** Manuell katalogisering kostar 200-400 SEK per bok. AI-berikning är **99.9% billigare**!
 

@@ -179,6 +179,10 @@ try {
 
 ## Kostnadskalkyl
 
+> **Inaktuellt.** Siffrorna nedan gäller Gemini 1.5 utan Google Search.
+> Aktuella kostnader och sökavgiften: se `enrich/COST_TRACKING.md` och
+> CLAUDE.md (avsnittet "Modellval och grundning").
+
 För produktion med betald API:
 
 - **Gemini 1.5 Flash**: $0.075 per 1M input tokens, $0.30 per 1M output tokens
