@@ -153,7 +153,7 @@ The final JSON includes 20+ metadata fields per book including ISBN, title, auth
 - **`add_marc_fields.php`** – Migrationsscript som lägger till nya MARC-fält (language_code, subjects_marc, genre_form, sab_classification, contributors) i befintlig Directus-kollektion.
 - **`cleanup_duplicates.php`** – Rensar dubbletter i `kft_koha_biblios`. Kör med `--dry-run` för förhandsvisning.
 - **`rebuild_shelf_snapshots.php`** – Återskapar last-known-good-snapshots för shelf.php från gamla friska cachefiler (hyllmedlemskap) + Directus (färsk metadata) + lokal bildcache. Används när Koha är onåbar. Stöder `--dry-run`, `--shelf=N`, `-v`.
-- **`sync_cron.sh`** – Kör alla syncar i sekvens: Branches → Biblios → Items → Holds (inkl. `hold_status` per exemplar) → Enrich (1000 böcker) → Qdrant vectors (dagligen kl 07:30 enligt crontab). Skickar start/success/fail-ping till healthchecks.io med per-steg-payload (nyckeltal som created/updated/errors). Konfigureras via `HEALTHCHECK_SYNC_ID` i `.env`. Exporterar `~/.local/bin` i PATH för att `uv` ska hittas i cron-miljön.
+- **`sync_cron.sh`** – Kör alla syncar i sekvens: Branches → Biblios → Items → Holds (inkl. `hold_status` per exemplar) → Enrich (1000 böcker) → Omberikning mot Libris → Qdrant vectors (dagligen kl 07:30 enligt crontab). Skickar start/success/fail-ping till healthchecks.io med per-steg-payload (nyckeltal som created/updated/errors). Konfigureras via `HEALTHCHECK_SYNC_ID` i `.env`. Exporterar `~/.local/bin` i PATH för att `uv` ska hittas i cron-miljön.
 - **`prepare_embedding_text.php`** – Aggregerar data från alla 4 Directus-kollektioner och bygger strukturerad embedding-text + metadata per biblio. Stöder `--output=json|jsonl|csv`, `--limit=N`, `--biblio-id=N`.
 
 ### Synklogik (sync_koha_to_directus.php)
@@ -225,10 +225,16 @@ uv run enrich_from_directus.py --model gemini-3.6-flash  # Annan modell (default
 ```
 
 **Cost tracking:**
-- Typical cost: ~$0.003 per book med `gemini-3.8-flash` (mätt 2026-09-28; priset
-  dubblas 2027-01-01). Tidigare siffra ($0.00015) byggde på gissade priser.
-- Costs calculated from actual token usage, **inklusive thinking-tokens**
-- Google Search-anropens egen kostnad ingår inte
+- Typical cost (mätt 2026-11-10, `gemini-3.8-flash`, priset dubblas 2027-01-01):
+  **~$0.004 per bok grundad i Libris**, **~$0.02–0.03 per bok via Google
+  Search** — sökavgiften dominerar.
+- Costs calculated from actual token usage, **inklusive thinking-tokens** och
+  sökträffarna i kontexten (`tool_use_prompt_token_count`)
+- **Sökavgiften ingår sedan 2026-11-10** (`sokkostnad()` i `modell.py`,
+  $14/1 000 sökfrågor, utan avdrag för gratiskvoten). Fram till dess saknades
+  den helt: loggen visade ~20 kr/dygn medan AI Studio visade 200–250 kr/dygn,
+  och projektets spendtak slog i 2026-11-09 (429 "monthly spending cap" — inte
+  en rate limit; läs `message` för att skilja dem åt).
 - Saved to database for transparency
 - See `enrich/COST_TRACKING.md` for details
 
@@ -258,16 +264,36 @@ uv run enrich_from_directus.py --model gemini-3.6-flash  # Annan modell (default
   5 889 av 35 428 berikningar (mest feb–mar 2026) saknar källor och är
   skrivna med den gamla prompten. Manuella rättelser i `kft_koha_enriched`
   skrivs inte över: synken hoppar över biblios som redan har en rad där.
-- **`reenrich_ungrounded.py`** (steg 5b i `sync_cron.sh`, 400/dygn) omberikar
-  rader med 0 källor (ersätts om nya svaret har källor, annars töms
-  beskrivningen) och sedan 1 källa (ersätts bara om nya svaret har källor).
+- **Libris före Google** (`enrich/libris.py`, sedan 2026-11-10). Libris XL
+  (`libris.kb.se/find.jsonld`, gratis, ingen nyckel) har sammanfattningar för
+  ungefär hälften av böckerna — sällan i bokens egen post, utan i MTM:s
+  talböcker (originalets ISBN i en anmärkning) och i Bokinfos förlagstexter
+  (slutar på `[Bokinfo]`). Uppslag på ISBN, sedan titel + författarens
+  efternamn (aldrig titel ensam: "Halland" och "Bamse" matchar allt).
+  Säljtext för klassuppsättningar ("Paketrabatt …") filtreras bort. Med
+  Libris-text görs ett Gemini-anrop **utan sökverktyg**
+  (`bygg_prompt_kalltexter()`) och Libris-posterna blir `grounding_sources`.
+  `hamta_texter()` returnerar `None` när Libris inte går att nå — skilj det
+  från `[]` (inget om boken). Kända svagheter: för serier (manga, Bamse) kan
+  texterna gälla en annan del; prompten ber modellen hålla sig allmän då.
+  Licensvillkoren för Bokinfo-texterna i Libris är inte utredda.
+- **Nyberikningen** (`enrich_from_directus.py`) tar Libris först och faller
+  tillbaka på Google Search när Libris saknar text eller är onåbart. Raden
+  `Källa: Libris N, Google Search M (K sökfrågor)` når Healthchecks.
+- **`reenrich_ungrounded.py`** (steg 5b i `sync_cron.sh`, 1 000 uppslag/dygn)
+  använder **bara Libris, aldrig Google**. Omberikningskön (rader med 0 och
+  sedan 1 källa) kostade 200–250 kr/dygn med Google. Med Libris-text ersätts
+  beskrivningen. Utan Libris-text **lämnas raden orörd** — ingen beskrivning
+  töms, eftersom Google med nya prompten grundade ~88 % av kön och Libris
+  bara ~50 % — och biblio_id skrivs i `enrich/.libris_missar.json`
+  (gitignorerad, bara på servern) så att körningen går vidare; missar provas
+  igen efter 90 dagar. Vad som ska hända med raderna utan Libris-text är ett
+  öppet beslut. Steget kan stängas av med `REENRICH_PAUSED=1` i `sync_cron.sh`.
   Rader med `date_updated` satt hoppas över — det betyder
-  manuell rättelse *eller* redan behandlad; varje behandlad rad PATCH:as så
-  körningen tar slut av sig själv ("Inget kvar att omberika"). Rätta därför
-  en berikning för hand med PATCH, aldrig genom att radera och skapa om raden.
-  Googles grundning: 1 500 anrop/dygn (Pacific-dygn) och 5 000 gratis
-  sökningar/månad, därefter $14/1 000 — den kostnaden syns inte i
-  `enrichment_cost_usd`.
+  manuell rättelse *eller* redan behandlad; varje behandlad rad PATCH:as.
+  Rätta därför en berikning för hand med PATCH, aldrig genom att radera och
+  skapa om raden. Googles grundning: 1 500 anrop/dygn (Pacific-dygn) och
+  5 000 gratis sökningar/månad, därefter $14/1 000.
 - `sync_cron.sh` filtrerar bort raderna per bok före `head -10` — annars
   trängs sammanfattningen ut ur Healthchecks-kroppen vid stora körningar.
 - Modellens livscykel bevakas i Dependabot-översikten (fliken AI & API:er).

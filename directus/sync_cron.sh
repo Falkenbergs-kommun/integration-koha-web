@@ -164,7 +164,7 @@ if [ -d "$ENRICH_DIR" ]; then
     # Rader per bok ([i/n] Enriching …, Cost: …) filtreras bort först — annars
     # fyller de head -10 vid stora körningar och sammanfattningen (inkl.
     # Ogrundade) når aldrig Healthchecks.
-    enrich_stats=$(echo "$enrich_output" | grep -iE '(Successfully|Enriched|Skipped|Errors?|Total|Cost|books?|RESOURCE_EXHAUSTED|quota|429|Ogrundade)' | grep -vE '^[[:space:]]*(Cost:|\[[0-9]+/[0-9]+\] Enriching biblio_id)' | sed 's/^[[:space:]]*//' | head -10)
+    enrich_stats=$(echo "$enrich_output" | grep -iE '(Successfully|Enriched|Skipped|Errors?|Total|Cost|books?|RESOURCE_EXHAUSTED|quota|429|Ogrundade|sökfrågor)' | grep -vE '^[[:space:]]*(Cost:|\[[0-9]+/[0-9]+\] Enriching biblio_id)' | sed 's/^[[:space:]]*//' | head -10)
 
     if [ $enrich_exit -eq 0 ]; then
         echo "[$STEP_TIMESTAMP] Enrich metadata: SUCCESS" >> "$LOG_FILE"
@@ -178,24 +178,22 @@ if [ -d "$ENRICH_DIR" ]; then
     cd "$SCRIPT_DIR"
 
     # Step 5b: Omberika berikningar utan/med en källa (gamla prompten utan
-    # katalogdata). 400/dygn håller oss under Googles grundningstak på 1 500
-    # anrop/dygn. Tar slut av sig själv: behandlade rader får date_updated.
-    #
-    # PAUSAD 2026-11-10: Google-grundningen debiteras per sökfråga och syns inte
-    # i enrichment_cost_usd. Verklig kostnad var ~200-250 kr/dygn mot loggade
-    # ~20 kr, och projektets spendtak slog i. Pausad tills grundningen byggts om
-    # mot andra källor. Sätt REENRICH_PAUSED=0 för att slå på igen.
-    REENRICH_PAUSED=1
+    # katalogdata) — BARA mot Libris sedan 2026-11-10, ingen Google-sökning.
+    # Google debiteras per sökfråga och kostade 200-250 kr/dygn här (loggat
+    # ~20 kr), så spendtaket slog i. Rader utan Libris-text lämnas orörda.
+    # --limit räknar Libris-uppslag (gratis); Gemini bara vid träff.
+    # Sätt REENRICH_PAUSED=1 för att stänga av steget.
+    REENRICH_PAUSED=0
     STEP_TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S')
     if [ "$REENRICH_PAUSED" = "1" ]; then
         echo "[$STEP_TIMESTAMP] Re-enrich ungrounded: PAUSED (sökavgifter, se sync_cron.sh)" >> "$LOG_FILE"
-        STEP_OUTPUTS="${STEP_OUTPUTS}--- Omberikning: PAUSAD (sökavgifter) ---\n\n"
+        STEP_OUTPUTS="${STEP_OUTPUTS}--- Omberikning: PAUSAD ---\n\n"
     else
     echo "[$STEP_TIMESTAMP] Starting sync: Re-enrich ungrounded..." >> "$LOG_FILE"
-    reenrich_output=$(cd "$ENRICH_DIR" && uv run reenrich_ungrounded.py --limit 400 2>&1)
+    reenrich_output=$(cd "$ENRICH_DIR" && uv run reenrich_ungrounded.py --limit 1000 2>&1)
     reenrich_exit=$?
     echo "$reenrich_output" >> "$LOG_FILE"
-    reenrich_stats=$(echo "$reenrich_output" | grep -E '^(Kvar|Omberikade|Behållna|Rensade|Errors|Total cost|Inget kvar)' | head -8)
+    reenrich_stats=$(echo "$reenrich_output" | grep -E '^(Kvar|Omberikade|Utan Libris|Errors|Total cost|Inget kvar)' | head -8)
     if [ $reenrich_exit -eq 0 ]; then
         echo "[$STEP_TIMESTAMP] Re-enrich ungrounded: SUCCESS" >> "$LOG_FILE"
         STEP_OUTPUTS="${STEP_OUTPUTS}--- Omberikning: OK ---\n${reenrich_stats}\n\n"

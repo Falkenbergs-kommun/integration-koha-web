@@ -1,29 +1,34 @@
 #!/usr/bin/env python3
 """
-Omberikning av berikningar som saknar eller har tveksamma källor.
+Omberikning av berikningar som saknar eller har tveksamma källor — mot Libris.
 
 Bakgrund: fram till 2026-11-03 fick Gemini bara titel, författare och ISBN.
 För titlar utan webbträffar gissade modellen utifrån titelorden (biblio 69716,
 en målares självbiografi, blev en bok om textilkonst). Den nya prompten
 (`bygg_prompt()` i enrich_from_directus.py) bär katalogdatan som fakta.
 
-Urval, i prioritetsordning:
-  1. Inga källor (grounding_sources tom) — svaret är modellens gissning.
-     Får det nya svaret källor ersätts texten; annars töms beskrivningen.
-  2. Exakt en källa — tveksamt (ofta Wikipedia/blogg/YouTube om en annan
-     person). Ersätts bara om det nya svaret har minst en källa; annars
-     behålls den befintliga texten.
+Urval: obehandlade rader med 0 källor (modellens gissning), sedan exakt 1
+källa (tveksamt — ofta Wikipedia/blogg om en annan person).
+
+Sedan 2026-11-10 används BARA Libris (libris.py), aldrig Google Search.
+Google debiterar per sökfråga och kostade 200–250 kr/dygn för den här kön
+(se modell.py). Med Google grundades ~88 % av raderna; Libris har text för
+~40 %. Därför:
+  - Libris-text finns  → ny beskrivning ur den, raden PATCH:as (behandlad).
+  - Ingen Libris-text  → raden lämnas ORÖRD. Ingen beskrivning töms, eftersom
+    Google troligen hade hittat något; biblio_id skrivs i MISSFIL så att
+    körningen går vidare i kön, och provas igen efter OMPROVA_DAGAR.
+  - Libris onåbart     → räknas som fel, inget skrivs.
+Vad som ska hända med raderna utan Libris-text är ett öppet beslut.
 
 Rader med `date_updated` satt hoppas över. Pipelinen skapar rader med POST
 (date_updated = null), så ett satt värde betyder manuell rättelse eller att
-raden redan behandlats av det här skriptet — varje behandlad rad PATCH:as
-(minst kostnaden), så den väljs aldrig igen och körningen tar slut av sig själv.
+raden redan behandlats av det här skriptet.
 
-Körs dagligen från sync_cron.sh med --limit för att hålla sig under Googles
-grundningstak (1 500 anrop/dygn för Gemini 3, delat med nattens berikning).
+--limit räknar Libris-uppslag (gratis); Gemini anropas bara vid träff.
 
 Usage:
-    uv run reenrich_ungrounded.py --limit 400
+    uv run reenrich_ungrounded.py --limit 1000
     uv run reenrich_ungrounded.py --dry-run --limit 5
 """
 
@@ -32,14 +37,38 @@ import json
 import os
 import sys
 import time
+from datetime import date, timedelta
 from pathlib import Path
 
 import requests
 from dotenv import load_dotenv
 from google import genai
 
+import libris
 from enrich_from_directus import KATALOGFALT, DirectusClient, beskrivningsfalt, enrich_book
-from modell import DEFAULT_MODEL, ar_grundad
+from modell import DEFAULT_MODEL
+
+# Rader där Libris saknade text: {biblio_id: "ÅÅÅÅ-MM-DD"}. Ligger bredvid
+# skriptet på servern (gitignorerad). Försvinner filen provas raderna om.
+MISSFIL = Path(__file__).parent / ".libris_missar.json"
+OMPROVA_DAGAR = 90
+
+
+def las_missar() -> dict[str, str]:
+    try:
+        return json.loads(MISSFIL.read_text())
+    except (OSError, ValueError):
+        return {}
+
+
+def nyligen_missad(missar: dict[str, str], biblio_id: int) -> bool:
+    datum = missar.get(str(biblio_id))
+    if not datum:
+        return False
+    try:
+        return date.fromisoformat(datum) > date.today() - timedelta(days=OMPROVA_DAGAR)
+    except ValueError:
+        return False
 
 
 def antal_kallor(varde) -> int:
@@ -112,7 +141,7 @@ def patcha(d: DirectusClient, rad_id: int, data: dict) -> bool:
 
 def main() -> int:
     p = argparse.ArgumentParser(description="Omberika berikningar utan eller med en källa.")
-    p.add_argument("--limit", type=int, default=400)
+    p.add_argument("--limit", type=int, default=1000)
     p.add_argument("--model", default=DEFAULT_MODEL)
     p.add_argument("--delay", type=float, default=1.0)
     p.add_argument("--dry-run", action="store_true")
@@ -123,79 +152,83 @@ def main() -> int:
     g = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
 
     kandidater = hamta_kandidater(d)
+    missar = las_missar()
     kvar0 = sum(1 for k in kandidater if k["kallor"] == 0)
+    vantande = [k for k in kandidater if not nyligen_missad(missar, k["biblio_id"])]
     print(f"Kvar att omberika: {len(kandidater)} ({kvar0} utan källor, "
-          f"{len(kandidater) - kvar0} med en källa)")
-    urval = kandidater[:args.limit]
+          f"{len(kandidater) - kvar0} med en källa), varav {len(kandidater) - len(vantande)} "
+          f"utan Libris-text senaste {OMPROVA_DAGAR} dagarna")
+    urval = vantande[:args.limit]
     if not urval:
         print("Inget kvar att omberika.")
         return 0
 
     katalog = hamta_katalogdata(d, [k["biblio_id"] for k in urval])
 
-    ersatta = behallna = rensade = fel = kvot = markerade = 0
+    ersatta = utan_text = fel = kvot = markerade = 0
     kostnad_tot = 0.0
-    for i, rad in enumerate(urval, 1):
-        bok = katalog.get(rad["biblio_id"])
-        if not bok:
-            # Inaktiv i katalogen — markera som behandlad så den inte väljs igen.
-            if not args.dry_run and patcha(d, rad["id"], {"enrichment_cost_usd": rad.get("enrichment_cost_usd") or 0}):
-                markerade += 1
-            continue
+    try:
+        for i, rad in enumerate(urval, 1):
+            bok = katalog.get(rad["biblio_id"])
+            if not bok:
+                # Inaktiv i katalogen — markera som behandlad så den inte väljs igen.
+                if not args.dry_run and patcha(d, rad["id"], {"enrichment_cost_usd": rad.get("enrichment_cost_usd") or 0}):
+                    markerade += 1
+                continue
 
-        print(f"[{i}/{len(urval)}] biblio_id {rad['biblio_id']} ({rad['kallor']} källa/or): {bok.get('title')}")
-        enr, gr, cost, kvotfel = enrich_book(g, args.model, bok)
-        kostnad_tot += cost
-        if not enr:
-            fel += 1
-            kvot += kvotfel
-            if kvotfel:
-                print("      ⚠  Gemini-kvoten slut — avbryter, resten tas nästa körning")
-                break
-            continue
+            kalltexter = libris.hamta_texter(bok)
+            if kalltexter is None:
+                print(f"[{i}/{len(urval)}] biblio_id {rad['biblio_id']}: Libris onåbart")
+                fel += 1
+                continue
+            if not kalltexter:
+                utan_text += 1
+                missar[str(rad["biblio_id"])] = date.today().isoformat()
+                continue
 
-        grundad = ar_grundad(gr)
-        total_kostnad = (rad.get("enrichment_cost_usd") or 0) + cost
+            print(f"[{i}/{len(urval)}] biblio_id {rad['biblio_id']} ({rad['kallor']} källa/or, "
+                  f"{len(kalltexter)} Libris-text/er): {bok.get('title')}")
+            enr, gr, cost, kvotfel = enrich_book(g, args.model, bok, kalltexter=kalltexter)
+            kostnad_tot += cost
+            if not enr:
+                fel += 1
+                kvot += kvotfel
+                if kvotfel:
+                    print("      ⚠  Gemini-kvoten slut — avbryter, resten tas nästa körning")
+                    break
+                continue
 
-        if rad["kallor"] == 0 or grundad:
             data = {
                 **beskrivningsfalt(enr, gr),
-                "grounding_search_queries": gr.get("search_queries", []),
-                "grounding_sources": gr.get("sources", []),
-                "enrichment_cost_usd": total_kostnad,
+                "grounding_search_queries": [],
+                "grounding_sources": gr["sources"],
+                "enrichment_cost_usd": (rad.get("enrichment_cost_usd") or 0) + cost,
             }
-            if grundad:
-                utfall = f"ersatt: {enr.abstract_enriched[:90]}..."
-                ersatta += 1
-            else:
-                utfall = "rensad (inga källor, beskrivningen borttagen)"
-                rensade += 1
-        else:
-            # Hade en källa, nya svaret har ingen — behåll befintlig text.
-            data = {"enrichment_cost_usd": total_kostnad}
-            utfall = "behållen (nytt svar saknade källor)"
-            behallna += 1
+            print(f"      ersatt: {enr.abstract_enriched[:90]}...")
+            ersatta += 1
+            if not args.dry_run:
+                if patcha(d, rad["id"], data):
+                    markerade += 1
+                else:
+                    fel += 1
 
-        print(f"      {utfall}")
+            if args.delay > 0:
+                time.sleep(args.delay)
+    finally:
+        # Sparas även vid avbrott, så att uppslagen inte görs om i onödan.
         if not args.dry_run:
-            if patcha(d, rad["id"], data):
-                markerade += 1
-            else:
-                fel += 1
-
-        if i < len(urval) and args.delay > 0:
-            time.sleep(args.delay)
+            MISSFIL.write_text(json.dumps(missar, indent=0, sort_keys=True))
 
     print("=" * 60)
-    print(f"Omberikade (ersatta): {ersatta}")
-    print(f"Behållna (nytt svar utan källor): {behallna}")
-    print(f"Rensade (inga källor, beskrivningen borttagen): {rensade}")
+    print(f"Omberikade ur Libris (ersatta): {ersatta}")
+    print(f"Utan Libris-text (orörda, provas igen om {OMPROVA_DAGAR} dagar): {utan_text}")
     print(f"Errors: {fel}" + (f" (varav kvot/429: {kvot})" if kvot else ""))
-    print(f"Total cost: ${kostnad_tot:.4f} USD (exkl. Google Search-avgift)")
-    print(f"Kvar efter körningen: {len(kandidater) - markerade}")
+    print(f"Total cost: ${kostnad_tot:.4f} USD (ingen sökavgift — Libris)")
+    print(f"Kvar efter körningen: {len(vantande) - markerade - utan_text} att slå upp, "
+          f"{len(kandidater) - markerade} totalt")
 
     # Fel på en enstaka bok ska inte larma; systematiska fel ska det.
-    behandlade = ersatta + behallna + rensade + fel
+    behandlade = ersatta + utan_text + fel
     return 1 if behandlade and fel / behandlade > 0.2 else 0
 
 

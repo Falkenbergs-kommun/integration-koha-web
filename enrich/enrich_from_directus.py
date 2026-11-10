@@ -5,7 +5,8 @@ Book enrichment pipeline: Fetch from Directus, enrich with Gemini, save to Direc
 This script:
 1. Fetches books from kft_koha_biblios that lack abstracts
 2. Filters out books already in kft_koha_enriched
-3. Enriches up to N books using Google Gemini API with Google Search grounding
+3. Enriches up to N books with Gemini: grounded in Libris texts when Libris
+   has any (libris.py, no search fee), otherwise Google Search grounding
 4. Saves enriched data directly to kft_koha_enriched via Directus API
 
 Usage:
@@ -31,7 +32,8 @@ from google import genai
 from google.genai.types import GenerateContentConfig, GoogleSearch, Tool
 from pydantic import BaseModel, Field
 
-from modell import DEFAULT_MODEL, SOK_INSTRUKTION, ar_grundad, kostnad
+import libris
+from modell import DEFAULT_MODEL, SOK_INSTRUKTION, ar_grundad, kostnad, sokkostnad
 
 
 # ── Structured output schema ──────────────────────────────────────────────
@@ -158,17 +160,8 @@ def _lista(varde) -> list[str]:
     return ut
 
 
-def bygg_prompt(book: dict) -> str:
-    """Prompt med bibliotekets katalogdata som fakta.
-
-    Tidigare fick modellen bara titel, författare och ISBN. För smala lokala
-    titlar ger webbsökningen ingenting, och då gissade modellen innehållet
-    utifrån titelorden — "Mitt sökande efter färg och form" (biblio 69716),
-    en målares självbiografi, blev en bok om textilkonst och vävning trots
-    att katalogen hade ämnesordet "Målare (bildkonstnärer)". Katalogdatan är
-    katalogiserad av bibliotekarier och väger därför tyngre än både sökträffar
-    och modellens minne.
-    """
+def katalogblock(book: dict) -> str:
+    """Katalogdatan som rader "Fält: värde", tomma fält utelämnade."""
     titel = book.get("title") or ""
     if book.get("subtitle"):
         titel = f"{titel} : {book['subtitle']}"
@@ -187,12 +180,31 @@ def bygg_prompt(book: dict) -> str:
         ("SAB-klassifikation", "; ".join(_lista(book.get("sab_classification")))),
         ("Språkkod", book.get("language_code") or ""),
     ]
-    katalog = "\n".join(f"{namn}: {varde}" for namn, varde in rader if varde)
+    return "\n".join(f"{namn}: {varde}" for namn, varde in rader if varde)
 
+
+SVARSINSTRUKTION = (
+    "Ge en koncis sammanfattning på svenska om bokens innehåll, teman och målgrupp. "
+    "Inkludera relevanta ämnesord samt 5-10 beskrivande taggar (lowercase) som fångar "
+    "bokens ämnen, teman och praktiska områden."
+)
+
+
+def bygg_prompt(book: dict) -> str:
+    """Prompt för Google Search-grundning, med bibliotekets katalogdata som fakta.
+
+    Tidigare fick modellen bara titel, författare och ISBN. För smala lokala
+    titlar ger webbsökningen ingenting, och då gissade modellen innehållet
+    utifrån titelorden — "Mitt sökande efter färg och form" (biblio 69716),
+    en målares självbiografi, blev en bok om textilkonst och vävning trots
+    att katalogen hade ämnesordet "Målare (bildkonstnärer)". Katalogdatan är
+    katalogiserad av bibliotekarier och väger därför tyngre än både sökträffar
+    och modellens minne.
+    """
     return (
         "Sök information om följande bok och beskriv vad den handlar om.\n\n"
         "Katalogdata från bibliotekets katalog (fakta, katalogiserade av bibliotekarier):\n"
-        f"{katalog}\n\n"
+        f"{katalogblock(book)}\n\n"
         "Regler:\n"
         "- Katalogdatan är korrekt. Motsäg den aldrig — varken om bokens ämne, "
         "genre eller vad författaren arbetar med.\n"
@@ -201,9 +213,34 @@ def bygg_prompt(book: dict) -> str:
         "- Hittar du inget om boken: skriv en kort, försiktig beskrivning som bara "
         "bygger på katalogdatan. Hitta aldrig på innehåll, yrken, platser eller "
         "händelser som inte står i katalogdatan eller i sökträffarna.\n\n"
-        "Ge en koncis sammanfattning på svenska om bokens innehåll, teman och målgrupp. "
-        "Inkludera relevanta ämnesord samt 5-10 beskrivande taggar (lowercase) som fångar "
-        "bokens ämnen, teman och praktiska områden."
+        + SVARSINSTRUKTION
+    )
+
+
+def bygg_prompt_kalltexter(book: dict, kalltexter: list[dict]) -> str:
+    """Prompt utan sökverktyg: katalogdata + texter från Libris (se libris.py).
+
+    Texterna gäller ofta en annan utgåva av samma verk (talbok, pocket), och
+    för serier ibland en annan del — därav regeln om serier. I test
+    2026-11-10 höll beskrivningarna samma nivå som de Google-grundade och
+    lade till mindre som inte stod i källan.
+    """
+    kallor = "\n".join(f"[{k['title']}] {k['text']}" for k in kalltexter)
+    return (
+        "Beskriv vad följande bok handlar om.\n\n"
+        "Katalogdata från bibliotekets katalog (fakta, katalogiserade av bibliotekarier):\n"
+        f"{katalogblock(book)}\n\n"
+        "Källtexter om boken (förlags- och bibliotekstexter, kan gälla andra utgåvor "
+        "av samma verk):\n"
+        f"{kallor}\n\n"
+        "Regler:\n"
+        "- Katalogdatan är korrekt. Motsäg den aldrig.\n"
+        "- Bygg beskrivningen ENBART på katalogdatan och källtexterna ovan. Du har "
+        "ingen webbsökning; lägg aldrig till handling, personer, platser, priser eller "
+        "detaljer ur eget minne.\n"
+        "- Gäller källtexterna olika delar i en serie: beskriv bara det som stämmer för "
+        "just den här titeln, och håll dig hellre allmän om serien än att blanda ihop delar.\n\n"
+        + SVARSINSTRUKTION
     )
 
 
@@ -232,34 +269,53 @@ def extract_grounding(response) -> dict:
 
 
 def enrich_book(
-    client: genai.Client, model: str, book: dict
+    client: genai.Client, model: str, book: dict,
+    kalltexter: Optional[list[dict]] = None,
 ) -> tuple[Optional[BookEnrichment], dict, float, bool]:
-    """Call Gemini with Google Search grounding to enrich a single book.
+    """Berika en bok med Gemini.
 
-    De stabila modellerna hoppar ofta över sökningen och svarar ur minnet.
-    Ett svar utan källor provas därför en gång till; blir även det ogrundat
+    Med `kalltexter` (från libris.py): ett anrop utan sökverktyg, och
+    texternas Libris-poster blir källorna. Utan: Google Search-grundning.
+    De stabila modellerna hoppar ofta över sökningen och svarar ur minnet,
+    så ett svar utan källor provas en gång till; blir även det ogrundat
     sparar anroparen ingen beskrivning (se `beskrivningsfalt`).
+
+    Kostnaden inkluderar sökavgiften för ALLA försökens sökfrågor, och
+    `search_queries` i grundningen samlar dem från alla försök — tidigare
+    sparades bara det sista svarets frågor.
     Returns (enrichment, grounding_metadata, cost_usd, is_quota_err)."""
     title = book.get("title", "")
-    prompt = bygg_prompt(book)
-
-    config = GenerateContentConfig(
-        system_instruction=SOK_INSTRUKTION,
-        tools=[Tool(google_search=GoogleSearch())],
-        response_mime_type="application/json",
-        response_json_schema=BookEnrichment.model_json_schema(),
-    )
+    schema = dict(response_mime_type="application/json",
+                  response_json_schema=BookEnrichment.model_json_schema())
     try:
+        if kalltexter:
+            response = client.models.generate_content(
+                model=model, contents=bygg_prompt_kalltexter(book, kalltexter),
+                config=GenerateContentConfig(**schema),
+            )
+            enrichment = BookEnrichment.model_validate_json(response.text)
+            grounding = {"search_queries": [],
+                         "sources": [{"uri": k["uri"], "title": k["title"]} for k in kalltexter]}
+            return enrichment, grounding, kostnad(response, model), False
+
+        config = GenerateContentConfig(
+            system_instruction=SOK_INSTRUKTION,
+            tools=[Tool(google_search=GoogleSearch())],
+            **schema,
+        )
         cost = 0.0
+        fragor: list[str] = []
         for _forsok in range(2):
             response = client.models.generate_content(
-                model=model, contents=prompt, config=config,
+                model=model, contents=bygg_prompt(book), config=config,
             )
-            cost += kostnad(response, model)
             enrichment = BookEnrichment.model_validate_json(response.text)
             grounding = extract_grounding(response)
+            fragor += grounding["search_queries"]
+            cost += kostnad(response, model) + sokkostnad(len(grounding["search_queries"]))
             if ar_grundad(grounding):
                 break
+        grounding["search_queries"] = fragor
         return enrichment, grounding, cost, False
     except Exception as exc:
         print(f"  ⚠  Error enriching '{title}': {exc}", file=sys.stderr)
@@ -338,6 +394,7 @@ def run_enrichment_pipeline(
     error_count = 0
     quota_error_count = 0
     ungrounded_count = 0
+    libris_count = google_count = sokfragor = 0
     total_cost = 0.0
 
     for i, book in enumerate(to_enrich, 1):
@@ -348,8 +405,19 @@ def run_enrichment_pipeline(
         print(f"[{i}/{len(to_enrich)}] Enriching biblio_id {biblio_id}:")
         print(f"      {title} ({author})")
 
-        # Enrich with Gemini
-        enrichment, grounding, cost_usd, is_quota_err = enrich_book(gemini_client, model, book)
+        # Libris först (gratis); Google Search bara när Libris saknar text
+        # eller inte går att nå — det är några få nya böcker per natt.
+        kalltexter = libris.hamta_texter(book)
+        if kalltexter:
+            print(f"      Källa: Libris ({len(kalltexter)} text/er)")
+            libris_count += 1
+        else:
+            print("      Källa: Google Search" + (" (Libris onåbart)" if kalltexter is None else " (inget i Libris)"))
+            google_count += 1
+
+        enrichment, grounding, cost_usd, is_quota_err = enrich_book(
+            gemini_client, model, book, kalltexter=kalltexter or None)
+        sokfragor += len(grounding.get("search_queries", []))
 
         if not enrichment:
             print(f"      ✗ Enrichment failed")
@@ -367,7 +435,7 @@ def run_enrichment_pipeline(
         print(f"        Cost: ${cost_usd:.6f} USD")
         grundad = ar_grundad(grounding)
         if not grundad:
-            print(f"      ⚠  Ogrundad: inga webbkällor efter två försök — sparas utan beskrivning")
+            print(f"      ⚠  Ogrundad: inget i Libris och inga webbkällor efter två försök — sparas utan beskrivning")
 
         # Step 4: Save to Directus
         if not dry_run:
@@ -413,7 +481,8 @@ def run_enrichment_pipeline(
     # Alltid utskriven, även som 0 — raden plockas upp i Healthchecks-kroppen
     # och en saknad rad ska inte kunna läsas som "inga ogrundade".
     print(f"⚠  Ogrundade (sparade utan beskrivning): {ungrounded_count} av {success_count}")
-    print(f"💰 Total cost: ${total_cost:.6f} USD")
+    print(f"📚 Källa: Libris {libris_count}, Google Search {google_count} ({sokfragor} sökfrågor)")
+    print(f"💰 Total cost: ${total_cost:.6f} USD (inkl. sökavgift utan avdrag för gratiskvoten)")
     if success_count > 0:
         print(f"   Average cost per book: ${total_cost/success_count:.6f} USD")
     print()

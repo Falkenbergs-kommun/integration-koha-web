@@ -8,3 +8,6 @@ enrich/.venv/
 __pycache__/
 
 # uv.lock committas MEDVETET (pinnar transitiva versioner för säkerhetsrevision)
+
+# Omberikningens minne av Libris-missar (skrivs på servern)
+enrich/.libris_missar.json

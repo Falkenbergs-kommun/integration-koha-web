@@ -28,8 +28,21 @@ SOK_INSTRUKTION = (
     "Svara aldrig enbart ur minnet; grunda sammanfattningen i sökträffarna."
 )
 
-# USD per miljon tokens: (gäller från, in, ut). Utdata inkluderar
-# thinking-tokens. Kostnad för själva Google Search-anropen ingår inte.
+# Google Search-grundning debiteras per sökfråga modellen gör (inte per
+# anrop), $14 per 1 000 efter 5 000 gratis/månad. Gratiskvoten räknas inte
+# av här — summan blir en övre gräns, vilket är bättre än att avgiften
+# saknas helt. Den saknades fram till 2026-11-10, och då visade loggen
+# ~20 kr/dygn medan AI Studio visade 200–250 kr/dygn.
+SOKPRIS_USD = 14 / 1000
+
+
+def sokkostnad(antal_fragor: int) -> float:
+    return antal_fragor * SOKPRIS_USD
+
+
+# USD per miljon tokens: (gäller från, in, ut). Indata inkluderar
+# sökträffarna som grundningen lägger i kontexten (tool_use_prompt_token_count),
+# utdata inkluderar thinking-tokens. Sökavgiften: se `sokkostnad`.
 PRISER: dict[str, list[tuple[date, float, float]]] = {
     "gemini-3.8-flash": [(date(2000, 1, 1), 0.75, 3.75), (date(2027, 1, 1), 1.50, 7.50)],
     "gemini-3.6-flash": [(date(2000, 1, 1), 0.75, 3.75), (date(2027, 1, 1), 1.50, 7.50)],
@@ -54,12 +67,14 @@ def kostnad(response, model: str, idag: date | None = None) -> float:
     if p is None:
         print(f"  ⚠  Okänt pris för {model} — kostnaden räknas som 0", file=sys.stderr)
         return 0.0
-    in_tok = getattr(usage, "prompt_token_count", 0) or 0
+    in_tok = ((getattr(usage, "prompt_token_count", 0) or 0)
+              + (getattr(usage, "tool_use_prompt_token_count", 0) or 0))
     ut_tok = ((getattr(usage, "candidates_token_count", 0) or 0)
               + (getattr(usage, "thoughts_token_count", 0) or 0))
     return in_tok / 1_000_000 * p[0] + ut_tok / 1_000_000 * p[1]
 
 
 def ar_grundad(grounding: dict) -> bool:
-    """Svaret bygger på minst en webbkälla."""
+    """Svaret bygger på minst en källa: en webbträff från Google Search
+    eller en Libris-text som skickats med i prompten."""
     return bool(grounding.get("sources"))
