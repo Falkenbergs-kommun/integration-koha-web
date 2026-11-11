@@ -759,6 +759,16 @@ A: `book.php` hämtar data för en enskild, specifik bok baserat på biblionumbe
 **Q: Var hittar jag ett biblionumber?**
 A: Biblionumber finns i URL:en på bibliotekskatalogen (t.ex. `opac-detail.pl?biblionumber=39141`), eller i responsen från andra endpoints som `biblio_id`-fältet.
 
+## Kvar att göra
+
+Läget 2026-11-11:
+
+- **Följ upp kostnaden för Libris-flödet.** AI Studios stapel för 10–11 november (PDT) ska ligga
+  runt 20–30 kr. Ligger den mycket högre stämmer inte uppskattningen på ~0,04 kr per bok, och då
+  ska Google-sökningarna i berikningen ses över.
+- **Beslut: ska de cirka 3 500 raderna utan Libris-text berikas via Google?** Det skulle kosta runt
+  1 900 kr (~0,53 kr per bok enligt AI Studio). Utan beslut går omberikningskön bara mot Libris.
+
 ## Licens
 
 Internt projekt för Falkenbergs kommun.
