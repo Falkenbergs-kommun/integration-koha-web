@@ -400,6 +400,7 @@ def build_payload(record: dict, hash_val: str) -> dict:
         "subtitle": meta.get("subtitle"),
         "total_items": meta.get("total_items", 0),
         "available_items": meta.get("available_items", 0),
+        "on_order_items": meta.get("on_order_items", 0),
         "total_holds": meta.get("total_holds", 0),
         "has_enriched_abstract": meta.get("has_enriched_abstract", False),
         "age_restriction": meta.get("age_restriction"),

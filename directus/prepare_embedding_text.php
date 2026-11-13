@@ -130,6 +130,26 @@ function fetchAllFromCollection($client, $collection, $fields = '*', $filter = [
 // ─── Aggregera item-data per biblio ──────────────────────────────────
 
 /**
+ * Kohas NOT_LOAN-värde för "Beställd" (under inköp). Negativa NOT_LOAN-värden
+ * betyder i Koha "går att reservera men inte låna än"; -1 sätts av förvärvet
+ * när exemplaret beställs och nollställs när det tas emot.
+ */
+const NOT_LOAN_ON_ORDER = -1;
+
+/**
+ * Är exemplaret under inköp? Beställt och i övrigt felfritt – ett beställt
+ * exemplar som samtidigt är förkommet eller makulerat räknas inte, det kommer
+ * inte att dyka upp på hyllan.
+ */
+function isItemOnOrder(array $item): bool
+{
+    return (int)($item['not_for_loan_status'] ?? 0) === NOT_LOAN_ON_ORDER
+        && (int)($item['damaged_status'] ?? 0) === 0
+        && (int)($item['lost_status'] ?? 0) === 0
+        && (int)($item['withdrawn'] ?? 0) === 0;
+}
+
+/**
  * Aggregerar items till strukturerad info per biblio_id
  *
  * @param array $items Alla items från kft_koha_items
@@ -149,6 +169,7 @@ function aggregateItemsByBiblio($items)
             $aggregated[$biblioId] = [
                 'total_items' => 0,
                 'available_items' => 0,
+                'on_order_items' => 0,
                 'item_types' => [],
                 'collection_codes' => [],
                 'locations' => [],
@@ -187,6 +208,10 @@ function aggregateItemsByBiblio($items)
             if ($homeBranch !== null) {
                 $agg['available_branches'][$homeBranch] = true;
             }
+        } elseif (isItemOnOrder($item)) {
+            // Under inköp: inte tillgängligt än, men inte heller "ej tillgängligt"
+            // som ett referens- eller skadat exemplar – det kommer.
+            $agg['on_order_items']++;
         }
 
         // Samla unika mediatyper
@@ -420,7 +445,14 @@ function buildEmbeddingText($biblio, $enriched, $itemAgg, $holdData, $itemTypeLa
 
     // ── Exemplar och tillgänglighet ──
     if ($itemAgg) {
-        $parts[] = "Exemplar: {$itemAgg['total_items']} totalt, {$itemAgg['available_items']} tillgängliga";
+        $line = "Exemplar: {$itemAgg['total_items']} totalt, {$itemAgg['available_items']} tillgängliga";
+        // Bara när det finns sådana – annars ändras texten (och embeddingen)
+        // för alla titlar utan att något nytt sägs.
+        $onOrder = $itemAgg['on_order_items'] ?? 0;
+        if ($onOrder > 0) {
+            $line .= ", {$onOrder} under inköp";
+        }
+        $parts[] = $line;
     }
 
     // ── Köande/reservationer ──
@@ -491,6 +523,7 @@ function buildMetadata($biblio, $enriched, $itemAgg, $holdData, $itemTypeLabels)
     if ($itemAgg) {
         $meta['total_items'] = $itemAgg['total_items'];
         $meta['available_items'] = $itemAgg['available_items'];
+        $meta['on_order_items'] = $itemAgg['on_order_items'] ?? 0;
         $meta['branches'] = array_keys($itemAgg['branches'] ?? []);
         $meta['available_branches'] = array_keys($itemAgg['available_branches'] ?? []);
     }
@@ -763,9 +796,12 @@ function main()
     echo "========================================================\n\n";
 }
 
-try {
-    main();
-} catch (Exception $e) {
-    echo "\nFel: " . $e->getMessage() . "\n";
-    exit(1);
+// Kör bara när filen startas direkt – inte när testerna laddar funktionerna.
+if (realpath($_SERVER['SCRIPT_FILENAME'] ?? '') === __FILE__) {
+    try {
+        main();
+    } catch (Exception $e) {
+        echo "\nFel: " . $e->getMessage() . "\n";
+        exit(1);
+    }
 }
