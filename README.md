@@ -638,6 +638,22 @@ Besök `debug.php` för att se:
 - Content-Type
 - Eventuella fel
 
+### Tillgänglighet i vektorsökningen
+
+`directus/prepare_embedding_text.php` räknar exemplaren per titel. Resultatet hamnar i Qdrant och visas i bibliotekets sökmodul (`joomla-kohasearch`):
+
+| Fält | Betyder |
+|---|---|
+| `total_items` | aktiva exemplar |
+| `available_items` / `available_branches` | inne på hemfilialen: inte utlånade, reserverade, skadade, förkomna, makulerade eller med NOT_LOAN ≠ 0 |
+| `on_order_items` | **under inköp**: NOT_LOAN `-1` och i övrigt felfria (sedan 2026-11-13, ärende APP-26110005) |
+
+Falkenbergs NOT_LOAN-värden i Koha: `-1` Under inköp, `1` Referens, `2` Ej för utlån. Sökmodulen visar "Under inköp" i stället för "ej tillgänglig" när inget exemplar är inne men något är beställt. Regeln finns även i sökmodulens `search.php` (live-status från Koha), så ändra den på båda ställena.
+
+```bash
+php directus/test_prepare_embedding_text.php   # testar aggregeringen utan Directus
+```
+
 ### Lägga till nya metadatafält
 
 1. Uppdatera `getBookDataFromApi()` i common.php (rad 66-122)
