@@ -293,6 +293,13 @@ uv run enrich_from_directus.py --model gemini-3.6-flash  # Annan modell (default
   (gitignorerad, bara på servern) så att körningen går vidare; missar provas
   igen efter 90 dagar. Vad som ska hända med raderna utan Libris-text är ett
   öppet beslut. Steget kan stängas av med `REENRICH_PAUSED=1` i `sync_cron.sh`.
+  **Gemini-fel parkeras** i `enrich/.gemini_fel.json` (samma format, 90
+  dagar) och larmregeln (`larmkod()`) kräver kvotfel eller minst 3 fel *och*
+  över 20 %: biblio 58621 gav tomt Gemini-svar varje morgon från 2026-11-15
+  och valdes om varje gång, och när kön krympt till två böcker 2026-11-20
+  blev det enda felet 50 % och gjorde Healthchecks röd. En ren andelströskel
+  slår fel när underlaget är litet. `svarstext()` gör att ett tomt svar
+  loggas med `finish_reason`/`block_reason` i stället för ett pydantic-fel.
   Rader med `date_updated` satt hoppas över — det betyder
   manuell rättelse *eller* redan behandlad; varje behandlad rad PATCH:as.
   Rätta därför en berikning för hand med PATCH, aldrig genom att radera och

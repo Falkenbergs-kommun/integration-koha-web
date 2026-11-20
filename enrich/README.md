@@ -27,7 +27,15 @@ Omberikar rader i `kft_koha_enriched` med 0 och sedan 1 webbkälla (skrivna
 med den gamla prompten). Bara Libris, aldrig Google. `--limit` räknar
 Libris-uppslag (gratis); Gemini anropas bara vid träff.
 
+Misslyckas Gemini-anropet för en bok (tomt svar, ogiltig JSON) skrivs
+biblio_id i `.gemini_fel.json` (bara på servern) och boken provas igen efter
+90 dagar; felmeddelandet i loggen anger `finish_reason`/`block_reason`.
+Ta bort raden ur filen för att prova om tidigare. Kvotfel (429) parkeras
+inte. Steget larmar (exit 1) vid kvotfel, eller vid minst 3 fel som
+samtidigt är mer än 20 % av de behandlade böckerna.
+
 ```bash
+uv run python -m unittest test_reenrich_larm -v      # larmregeln, inga nätverksanrop
 uv run reenrich_ungrounded.py --dry-run --limit 40   # inget skrivs
 uv run reenrich_ungrounded.py --limit 1000           # som i nattjobbet
 ```

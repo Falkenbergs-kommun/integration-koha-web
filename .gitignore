@@ -11,3 +11,5 @@ __pycache__/
 
 # Omberikningens minne av Libris-missar (skrivs på servern)
 enrich/.libris_missar.json
+# ... och av Gemini-fel
+enrich/.gemini_fel.json

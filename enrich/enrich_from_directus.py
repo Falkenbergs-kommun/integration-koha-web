@@ -268,6 +268,21 @@ def extract_grounding(response) -> dict:
     return grounding
 
 
+def svarstext(response) -> str:
+    """Svarets text, eller ett fel som säger varför den saknas.
+
+    Gemini kan svara utan text (säkerhetsfilter, recitation, avbrutet svar).
+    Då är `response.text` None, och pydantic-felet från
+    `model_validate_json(None)` säger ingenting om orsaken."""
+    if response.text:
+        return response.text
+    kandidater = getattr(response, "candidates", None) or []
+    finish = getattr(kandidater[0], "finish_reason", None) if kandidater else None
+    block = getattr(getattr(response, "prompt_feedback", None), "block_reason", None)
+    raise RuntimeError(
+        f"tomt svar från Gemini (finish_reason={finish}, block_reason={block})")
+
+
 def enrich_book(
     client: genai.Client, model: str, book: dict,
     kalltexter: Optional[list[dict]] = None,
@@ -293,7 +308,7 @@ def enrich_book(
                 model=model, contents=bygg_prompt_kalltexter(book, kalltexter),
                 config=GenerateContentConfig(**schema),
             )
-            enrichment = BookEnrichment.model_validate_json(response.text)
+            enrichment = BookEnrichment.model_validate_json(svarstext(response))
             grounding = {"search_queries": [],
                          "sources": [{"uri": k["uri"], "title": k["title"]} for k in kalltexter]}
             return enrichment, grounding, kostnad(response, model), False
@@ -309,7 +324,7 @@ def enrich_book(
             response = client.models.generate_content(
                 model=model, contents=bygg_prompt(book), config=config,
             )
-            enrichment = BookEnrichment.model_validate_json(response.text)
+            enrichment = BookEnrichment.model_validate_json(svarstext(response))
             grounding = extract_grounding(response)
             fragor += grounding["search_queries"]
             cost += kostnad(response, model) + sokkostnad(len(grounding["search_queries"]))

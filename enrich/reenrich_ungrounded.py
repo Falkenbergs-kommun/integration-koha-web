@@ -19,6 +19,9 @@ Google debiterar per sökfråga och kostade 200–250 kr/dygn för den här kön
     Google troligen hade hittat något; biblio_id skrivs i MISSFIL så att
     körningen går vidare i kön, och provas igen efter OMPROVA_DAGAR.
   - Libris onåbart     → räknas som fel, inget skrivs.
+  - Gemini-fel         → räknas som fel och biblio_id skrivs i FELFIL, så att
+    samma bok inte väljs om varje morgon; provas igen efter OMPROVA_DAGAR.
+    Kvotfel (429) parkeras inte: då avbryts körningen och resten tas nästa dag.
 Vad som ska hända med raderna utan Libris-text är ett öppet beslut.
 
 Rader med `date_updated` satt hoppas över. Pipelinen skapar rader med POST
@@ -53,10 +56,19 @@ from modell import DEFAULT_MODEL
 MISSFIL = Path(__file__).parent / ".libris_missar.json"
 OMPROVA_DAGAR = 90
 
+# Rader där Gemini-anropet misslyckades (tomt svar, ogiltig JSON), samma
+# format. Utan den valdes biblio 58621 om varje morgon i en vecka, och när
+# kön krympt till två böcker blev det enda felet 50 % och larmade.
+FELFIL = Path(__file__).parent / ".gemini_fel.json"
 
-def las_missar() -> dict[str, str]:
+# Larmregeln: minst så här många fel OCH mer än andelen nedan.
+LARM_MINST_FEL = 3
+LARM_FELANDEL = 0.2
+
+
+def las_missar(fil: Path = MISSFIL) -> dict[str, str]:
     try:
-        return json.loads(MISSFIL.read_text())
+        return json.loads(fil.read_text())
     except (OSError, ValueError):
         return {}
 
@@ -69,6 +81,19 @@ def nyligen_missad(missar: dict[str, str], biblio_id: int) -> bool:
         return date.fromisoformat(datum) > date.today() - timedelta(days=OMPROVA_DAGAR)
     except ValueError:
         return False
+
+
+def larmkod(behandlade: int, fel: int, kvot: int) -> int:
+    """Exit-kod. Fel på enstaka böcker ska inte larma; systematiska fel ska det.
+
+    Bara en andel räcker inte: när kön nästan är tom är en enda bok 50 %.
+    Kvotfel larmar alltid — körningen avbryts vid det första, så de blir
+    aldrig fler än ett."""
+    if kvot:
+        return 1
+    if fel >= LARM_MINST_FEL and fel / behandlade > LARM_FELANDEL:
+        return 1
+    return 0
 
 
 def antal_kallor(varde) -> int:
@@ -153,11 +178,17 @@ def main() -> int:
 
     kandidater = hamta_kandidater(d)
     missar = las_missar()
+    gemini_fel = las_missar(FELFIL)
     kvar0 = sum(1 for k in kandidater if k["kallor"] == 0)
-    vantande = [k for k in kandidater if not nyligen_missad(missar, k["biblio_id"])]
+    n_missade = sum(1 for k in kandidater if nyligen_missad(missar, k["biblio_id"]))
+    vantande = [k for k in kandidater
+                if not nyligen_missad(missar, k["biblio_id"])
+                and not nyligen_missad(gemini_fel, k["biblio_id"])]
+    n_parkerade = len(kandidater) - len(vantande) - n_missade
     print(f"Kvar att omberika: {len(kandidater)} ({kvar0} utan källor, "
-          f"{len(kandidater) - kvar0} med en källa), varav {len(kandidater) - len(vantande)} "
-          f"utan Libris-text senaste {OMPROVA_DAGAR} dagarna")
+          f"{len(kandidater) - kvar0} med en källa), varav {n_missade} "
+          f"utan Libris-text senaste {OMPROVA_DAGAR} dagarna"
+          + (f" och {n_parkerade} parkerade efter Gemini-fel" if n_parkerade else ""))
     urval = vantande[:args.limit]
     if not urval:
         print("Inget kvar att omberika.")
@@ -165,7 +196,7 @@ def main() -> int:
 
     katalog = hamta_katalogdata(d, [k["biblio_id"] for k in urval])
 
-    ersatta = utan_text = fel = kvot = markerade = 0
+    ersatta = utan_text = fel = kvot = markerade = parkerade = 0
     kostnad_tot = 0.0
     try:
         for i, rad in enumerate(urval, 1):
@@ -196,6 +227,8 @@ def main() -> int:
                 if kvotfel:
                     print("      ⚠  Gemini-kvoten slut — avbryter, resten tas nästa körning")
                     break
+                gemini_fel[str(rad["biblio_id"])] = date.today().isoformat()
+                parkerade += 1
                 continue
 
             data = {
@@ -218,18 +251,20 @@ def main() -> int:
         # Sparas även vid avbrott, så att uppslagen inte görs om i onödan.
         if not args.dry_run:
             MISSFIL.write_text(json.dumps(missar, indent=0, sort_keys=True))
+            if parkerade:
+                FELFIL.write_text(json.dumps(gemini_fel, indent=0, sort_keys=True))
 
     print("=" * 60)
     print(f"Omberikade ur Libris (ersatta): {ersatta}")
     print(f"Utan Libris-text (orörda, provas igen om {OMPROVA_DAGAR} dagar): {utan_text}")
-    print(f"Errors: {fel}" + (f" (varav kvot/429: {kvot})" if kvot else ""))
+    print(f"Errors: {fel}"
+          + (f" (varav kvot/429: {kvot})" if kvot else "")
+          + (f" (varav Gemini-fel, parkerade {OMPROVA_DAGAR} dagar: {parkerade})" if parkerade else ""))
     print(f"Total cost: ${kostnad_tot:.4f} USD (ingen sökavgift — Libris)")
-    print(f"Kvar efter körningen: {len(vantande) - markerade - utan_text} att slå upp, "
+    print(f"Kvar efter körningen: {len(vantande) - markerade - utan_text - parkerade} att slå upp, "
           f"{len(kandidater) - markerade} totalt")
 
-    # Fel på en enstaka bok ska inte larma; systematiska fel ska det.
-    behandlade = ersatta + utan_text + fel
-    return 1 if behandlade and fel / behandlade > 0.2 else 0
+    return larmkod(ersatta + utan_text + fel, fel, kvot)
 
 
 if __name__ == "__main__":
