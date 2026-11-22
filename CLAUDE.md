@@ -387,6 +387,7 @@ uv run sync_to_qdrant.py --limit=50 -v      # Test with 50 books
 - **IPv4-workaround**: Qdrant-servern har AAAA-records men lyssnar inte på IPv6. Scriptet tvingar IPv4 via socket monkey-patch (samma som crawler-projektet).
 - **BM25 sparse vectors**: Genereras lokalt (ingen API-kostnad). IDF-viktning beräknas server-side av Qdrant.
 - **Cron**: Körs som steg 6 i `sync_cron.sh` (efter Branches → Biblios → Items → Holds → Enrich).
+- **Tillfälliga Directus-fel fäller inte steget** (sedan 2026-11-22): `fetchAllFromCollection()` i `prepare_embedding_text.php` går via `directusGetWithRetry()`, som provar igen efter 5, 15 och 45 s vid HTTP 0/408/429/5xx men kastar direkt vid t.ex. 401/403. En enda misslyckad sidhämtning fällde annars hela Qdrant-steget. Felmeddelanden och retry-varningar går till **stderr** — stdout bär JSONL-datan, och `sync_to_qdrant.py` visade tidigare bara stderr vid fel, så felet (som då skrevs till stdout) nådde aldrig `sync.log` eller Healthchecks. Python skickar nu vidare PHP:s stderr även vid lyckad körning och visar slutet av stdout vid fel.
 
 ### Qdrant API
 

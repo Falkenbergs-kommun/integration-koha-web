@@ -228,12 +228,26 @@ def fetch_embedding_data(limit: int | None, verbose: bool) -> list[dict]:
     if verbose:
         print(f"  Kör: {' '.join(cmd)}")
 
-    result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+    # 600 s: normalt ~50 s, men nya försök mot Directus (5+15+45 s paus, 60 s
+    # timeout per anrop) får plats utan att subprocess kastar TimeoutExpired.
+    result = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
 
     if result.returncode != 0:
         print(f"PHP-scriptet misslyckades (exit {result.returncode}):", file=sys.stderr)
         print(result.stderr, file=sys.stderr)
+        # Visa även slutet av stdout (utan JSONL-rader): äldre versioner av
+        # PHP-scriptet skrev felet dit, och då nådde inget sync.log eller
+        # Healthchecks (2026-11-22).
+        status = [r for r in result.stdout.splitlines() if r.strip() and not r.lstrip().startswith("{")]
+        if status:
+            print("Sista raderna från PHP (stdout):", file=sys.stderr)
+            print("\n".join(status[-15:]), file=sys.stderr)
         sys.exit(1)
+
+    # Varningar från PHP (t.ex. nya försök mot Directus) ska synas i sync.log
+    # även när scriptet till slut lyckas.
+    if result.stderr.strip():
+        print(result.stderr.rstrip(), file=sys.stderr)
 
     records = []
     for line in result.stdout.strip().split("\n"):

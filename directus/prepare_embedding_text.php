@@ -58,6 +58,55 @@ $ITEM_TYPE_LABELS = [
 // ─── Directus-paginering ─────────────────────────────────────────────
 
 /**
+ * GET mot Directus med nya försök vid tillfälliga fel.
+ *
+ * En kort Directus-störning fällde tidigare hela Qdrant-steget i nattsynken
+ * (2026-11-22: exit 1 på första sidan, åtta sekunder efter att föregående
+ * steg pratat med Directus utan problem). Nya försök görs bara vid fel som
+ * kan gå över: ingen anslutning (HTTP 0), 408, 429 och 5xx. Övriga koder,
+ * t.ex. 401/403 vid fel token, kastar direkt.
+ *
+ * @param int[] $pauser Sekunder att vänta före respektive nytt försök
+ * @return string Svarskroppen vid HTTP 200
+ * @throws Exception När försöken är slut eller felet inte är tillfälligt
+ */
+function directusGetWithRetry($url, $token, $beskrivning, array $pauser = [5, 15, 45])
+{
+    $forsok = 0;
+    while (true) {
+        $ch = curl_init($url);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_HTTPHEADER, [
+            'Authorization: Bearer ' . $token,
+            'Content-Type: application/json'
+        ]);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 60);
+
+        $response = curl_exec($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $curlFel = curl_error($ch);
+
+        if ($httpCode === 200 && $response !== false) {
+            return $response;
+        }
+
+        $orsak = "HTTP {$httpCode}" . ($curlFel !== '' ? ", {$curlFel}" : '');
+        $tillfalligt = $httpCode === 0 || $httpCode === 408 || $httpCode === 429 || $httpCode >= 500;
+
+        if (!$tillfalligt || $forsok >= count($pauser)) {
+            $antal = $forsok + 1;
+            throw new Exception("Misslyckades hämta {$beskrivning} ({$orsak}) efter {$antal} försök");
+        }
+
+        $paus = $pauser[$forsok];
+        // stderr, så att JSONL-utdatan på stdout inte störs.
+        fwrite(STDERR, "  VARNING: {$beskrivning} gav {$orsak}, nytt försök om {$paus} s\n");
+        sleep($paus);
+        $forsok++;
+    }
+}
+
+/**
  * Hämta alla poster från en Directus-kollektion med paginering
  *
  * @param DirectusClient $client
@@ -88,21 +137,7 @@ function fetchAllFromCollection($client, $collection, $fields = '*', $filter = [
         $query = http_build_query($params);
         $fullUrl = rtrim($client->getBaseUrl(), '/') . "/items/{$collection}?{$query}";
 
-        $ch = curl_init($fullUrl);
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch, CURLOPT_HTTPHEADER, [
-            'Authorization: Bearer ' . $client->getToken(),
-            'Content-Type: application/json'
-        ]);
-        curl_setopt($ch, CURLOPT_TIMEOUT, 60);
-
-        $response = curl_exec($ch);
-        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        curl_close($ch);
-
-        if ($httpCode !== 200) {
-            throw new Exception("Misslyckades hämta {$collection} offset {$offset} (HTTP {$httpCode})");
-        }
+        $response = directusGetWithRetry($fullUrl, $client->getToken(), "{$collection} offset {$offset}");
 
         $data = json_decode($response, true);
         $items = $data['data'] ?? [];
@@ -801,7 +836,8 @@ if (realpath($_SERVER['SCRIPT_FILENAME'] ?? '') === __FILE__) {
     try {
         main();
     } catch (Exception $e) {
-        echo "\nFel: " . $e->getMessage() . "\n";
+        // Felet till stderr: sync_to_qdrant.py visar stderr när scriptet faller.
+        fwrite(STDERR, "\nFel: " . $e->getMessage() . "\n");
         exit(1);
     }
 }
