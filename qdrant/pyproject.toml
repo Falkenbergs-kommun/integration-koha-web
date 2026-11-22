@@ -8,9 +8,10 @@ dependencies = [
     "openai>=2.29,<3",
     # Måste hålla sig inom 1 minor från serverversionen (qdrant-klienten
     # kräver samma major och minor-diff <= 1, se common/version_check.py).
-    # Servern kör 1.16.2 -> klienten får vara 1.15-1.17. Höj detta FÖRST
-    # när Qdrant-servern uppgraderats, annars går skrivvägen i ospecificerat läge.
-    "qdrant-client>=1.17,<1.18",
+    # Servern kör 1.19.1 (sedan nov 2026, var 1.16.2) -> klienten får vara
+    # 1.18-1.20. Höj detta FÖRST när Qdrant-servern uppgraderats, annars går
+    # skrivvägen i ospecificerat läge.
+    "qdrant-client>=1.19,<1.20",
     "fastembed>=0.3",
     "python-dotenv>=1.2.2",
 ]
